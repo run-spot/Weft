@@ -23,7 +23,7 @@ The fetched RunTheSpot develop snapshot uses Kotlin 2.4.21, AGP 9.3.2, and Compo
 
 ## Weft bridge-library baseline
 
-The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1, with Android compile SDK 37, min SDK 24, and JVM target 17. This tuple is within the reviewed Kotlin compatibility range, and AGP 9.3.1 supports Android API 37. Keep it **candidate** until the repository CI builds the Android and Apple targets and the modules contain real consumer-facing APIs. The local POM and Gradle configuration checks are not a full platform compatibility claim.
+The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1, with Android compile SDK 36, min SDK 24, and JVM target 17. This tuple is within the reviewed Kotlin compatibility range, and API 36 is supported by this AGP line. Keep it **candidate** until repository CI builds the Android and Apple targets and the modules contain real consumer-facing APIs. The local POM and Gradle configuration checks are not a full platform compatibility claim.
 
 ## Version update procedure
 

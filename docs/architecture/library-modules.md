@@ -29,7 +29,7 @@ Only create a source-set implementation when a module milestone needs it. Keep A
 
 ## Platform targets
 
-The common convention currently declares Android, iOS device (`iosArm64`), Apple Silicon simulator (`iosSimulatorArm64`), and Intel simulator (`iosX64`) targets. Android uses compile SDK 37, min SDK 24, and JVM bytecode target 17. These are initial build defaults, not yet the minimum OS support promise of any released artifact.
+The common convention currently declares Android, iOS device (`iosArm64`), Apple Silicon simulator (`iosSimulatorArm64`), and Intel simulator (`iosX64`) targets. Android uses compile SDK 36, min SDK 24, and JVM bytecode target 17. These are initial build defaults, not yet the minimum OS support promise of any released artifact.
 
 The official Kotlin compatibility guide lists Kotlin 2.4.21 with Gradle 7.6.3–9.7.0 and AGP 8.5.2–9.3.1. The repository pins the upper compatible versions for this baseline. Recheck the guide before changing the tuple, and record CI results separately from official compatibility ranges.
 
