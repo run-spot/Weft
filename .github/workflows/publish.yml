@@ -20,6 +20,7 @@ jobs:
       ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
       ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
       ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+      WEFT_DEVELOPER_EMAIL: ${{ vars.WEFT_DEVELOPER_EMAIL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -32,6 +33,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Stage release in Central Portal
         run: |
+          if [ -z "$WEFT_DEVELOPER_EMAIL" ]; then
+            echo "WEFT_DEVELOPER_EMAIL repository variable must be set before publishing." >&2
+            exit 1
+          fi
           case "$GITHUB_REF_NAME" in
             map-v*) MODULE=map; VERSION="${GITHUB_REF_NAME#map-v}" ;;
             push-v*) MODULE=push; VERSION="${GITHUB_REF_NAME#push-v}" ;;
@@ -39,4 +44,4 @@ jobs:
             *) echo "Unsupported release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
           esac
           test -n "$VERSION"
-          ./gradlew "-PVERSION_NAME=$VERSION" ":$MODULE:publishToMavenCentral"
+          ./gradlew "-PVERSION_NAME=$VERSION" "-PPOM_DEVELOPER_EMAIL=$WEFT_DEVELOPER_EMAIL" ":$MODULE:publishToMavenCentral"

@@ -14,7 +14,7 @@ Resolve these before public project operations or a real library release.
 
 ## Bridge library
 
-- Can the `io.github.run-spot` namespace be verified and managed by the RunTheSpot organization in Central Portal?
+- Can the `io.github.run-spot` namespace be verified and managed by the GitHub organization that owns this repository in Central Portal?
 - Which iOS Swift SDK and Android SDK should the first pilot connect?
 - Should compatibility with an Android API preserve behavior only, or also naming and call shape?
 - Which Android minSdk and iOS deployment target should the first released artifacts support?
@@ -23,5 +23,5 @@ Resolve these before public project operations or a real library release.
 
 ## Version policy
 
-- Should only officially compatible tuples be marked stable while versions observed in RunTheSpot remain candidates?
+- Should only officially compatible tuples be marked stable while unverified versions remain candidates?
 - Who owns the compatibility matrix and how often should it be reviewed?

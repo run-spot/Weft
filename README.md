@@ -8,7 +8,7 @@ Weft helps a team answer three questions before generating project code:
 2. How should shared and native code communicate?
 3. Which modules should own each responsibility?
 
-Weft combines architecture guidance, focused Codex skills, project profiles, and a structural scaffold CLI. It uses RunTheSpot as a case study while keeping its running-service domain and server choices out of the default template.
+Weft combines architecture guidance, focused Codex skills, project profiles, and a structural scaffold CLI. Its recommendations are organized around explicit product decisions and reusable platform boundaries.
 
 ## Current status
 
@@ -25,7 +25,6 @@ Weft is an early open-source project. Its CLI creates a decision-recorded app la
 - [Maven Central publishing](docs/architecture/maven-central-publishing.md)
 - [Backend choices](docs/architecture/backend.md)
 - [Toolchain policy](docs/architecture/toolchain-policy.md)
-- [RunTheSpot case study](docs/reference/runthespot.md)
 - [Harness design and profiles](docs/harness.md)
 - [Open questions](docs/open-questions.md)
 

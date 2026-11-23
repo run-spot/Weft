@@ -5,7 +5,7 @@ Do not copy version numbers without recording the Kotlin Gradle Plugin, Gradle, 
 ## Support states
 
 - **officially-supported:** The official Kotlin compatibility guide includes the tuple, and Weft CI has built it.
-- **observed:** A case-study project uses the version. Weft does not claim support.
+- **observed:** An external project or Weft example uses the version. Weft does not claim support.
 - **candidate:** The official range or Weft CI validation is still being checked.
 - **unsupported:** Documentation or builds show the tuple cannot be used.
 
@@ -16,10 +16,6 @@ Do not use these labels interchangeably. The ranges below were checked on 2026-1
 For AGP 9+, keep the Android application shell and KMP Android library target in separate modules. Use Google's com.android.kotlin.multiplatform.library plugin for the KMP Android target and keep the Android app module on com.android.application. Do not copy the old com.android.library plus KMP setup into a new profile.
 
 The Kotlin compatibility guide lists Kotlin 2.4.20–2.4.21 with Gradle 7.6.3–9.7.0, AGP 8.5.2–9.3.1, and Xcode 26.4. Select an exact tuple within the published range, then require Weft Android and iOS CI before marking it officially-supported.
-
-## RunTheSpot observed tuple
-
-The fetched RunTheSpot develop snapshot uses Kotlin 2.4.21, AGP 9.3.2, and Compose Multiplatform 1.12.2. Record this as an observed production case, not as a Weft supported tuple: AGP 9.3.2 is outside the AGP 9.3.1 upper bound in the reviewed Kotlin compatibility table. Revisit this classification when the official table changes and the tuple has reproducible builds.
 
 ## Weft bridge-library baseline
 
