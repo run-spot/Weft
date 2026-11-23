@@ -59,4 +59,4 @@ A symlink keeps the skill and its repository guidance discoverable.
 
 ## Contributing
 
-Run `./scripts/verify.sh` before proposing changes. Read [AGENTS.md](AGENTS.md) for the repository workflow. The open-source license has not been selected; choose one before the first source push.
+Run `./scripts/verify.sh` before proposing changes. Read [AGENTS.md](AGENTS.md) for the repository workflow. Weft is licensed under the [Apache License 2.0](LICENSE).

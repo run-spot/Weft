@@ -41,7 +41,7 @@ Connect the common API with expect/actual or an injected platform provider when 
 
 ### Maven Central
 
-Publish KMP Gradle publications for Android and KMP Gradle consumers. Before public release, decide the group ID, minimum Android API, Kotlin/KGP compatibility range, API stability policy, license, signing, and release automation.
+Publish KMP Gradle publications for Android and KMP Gradle consumers. Before public release, decide the group ID, minimum Android API, Kotlin/KGP compatibility range, API stability policy, signing, and release automation. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
 
 ### SwiftPM/Xcode
 

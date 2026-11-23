@@ -4,7 +4,6 @@ Resolve these before public project operations or a real library release.
 
 ## Project operations
 
-- Which license should cover the source and documentation: Apache-2.0, MIT, or separate licenses?
 - Should Weft skills target Codex only, or should we validate compatibility with other Agent Skills hosts?
 
 ## Templates
