@@ -9,7 +9,7 @@ Do not copy version numbers without recording the Kotlin Gradle Plugin, Gradle, 
 - **candidate:** The official range or Weft CI validation is still being checked.
 - **unsupported:** Documentation or builds show the tuple cannot be used.
 
-Do not use these labels interchangeably. The ranges below were checked on 2026-11-23 and must be refreshed from official docs.
+Do not use these labels interchangeably. The ranges below were checked on 2026-11-24 and must be refreshed from official docs.
 
 ## AGP 9+
 
@@ -20,6 +20,10 @@ The Kotlin compatibility guide lists Kotlin 2.4.20–2.4.21 with Gradle 7.6.3–
 ## RunTheSpot observed tuple
 
 The fetched RunTheSpot develop snapshot uses Kotlin 2.4.21, AGP 9.3.2, and Compose Multiplatform 1.12.2. Record this as an observed production case, not as a Weft supported tuple: AGP 9.3.2 is outside the AGP 9.3.1 upper bound in the reviewed Kotlin compatibility table. Revisit this classification when the official table changes and the tuple has reproducible builds.
+
+## Weft bridge-library baseline
+
+The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1, with Android compile SDK 37, min SDK 24, and JVM target 17. This tuple is within the reviewed Kotlin compatibility range, and AGP 9.3.1 supports Android API 37. Keep it **candidate** until the repository CI builds the Android and Apple targets and the modules contain real consumer-facing APIs. The local POM and Gradle configuration checks are not a full platform compatibility claim.
 
 ## Version update procedure
 
@@ -36,3 +40,4 @@ The fetched RunTheSpot develop snapshot uses Kotlin 2.4.21, AGP 9.3.2, and Compo
 - [AGP 9 migration for multiplatform projects](https://kotlinlang.org/docs/multiplatform/multiplatform-project-agp-9-migration.html)
 - [Android KMP library plugin](https://developer.android.com/kotlin/multiplatform/plugin)
 - [Compose Multiplatform compatibility and releases](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
+- [Android API and AGP compatibility](https://developer.android.com/studio/releases)

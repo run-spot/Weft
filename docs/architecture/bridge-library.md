@@ -27,7 +27,7 @@ This library does not copy an Android interface unchanged into common Kotlin. It
 After selecting a real SDK, validate the smallest useful structure:
 
 ~~~text
-bridge/<capability>/
+<capability>/
   src/commonMain/       # public API, neutral models, shared validation
   src/androidMain/      # Android SDK adapter
   src/iosMain/          # Kotlin/Native adapter to Apple façade
@@ -41,11 +41,13 @@ Connect the common API with expect/actual or an injected platform provider when 
 
 ### Maven Central
 
-Publish KMP Gradle publications for Android and KMP Gradle consumers. Before public release, decide the group ID, minimum Android API, Kotlin/KGP compatibility range, API stability policy, signing, and release automation. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+Publish each capability as an independent KMP Gradle artifact for Android and KMP Gradle consumers. The initial `GROUP` is `io.github.run-spot.weft`; verify ownership of the parent `io.github.run-spot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+
+The build conventions, module coordinates, metadata, signing hooks, and staged release workflow are described in [Bridge library modules](library-modules.md) and [Maven Central publishing](maven-central-publishing.md). Nothing has been published yet.
 
 ### SwiftPM/Xcode
 
-SwiftPM consumers need a separate package and XCFramework binary distribution. Manage the public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target.
+SwiftPM consumers need a separate package and XCFramework binary distribution. Maven Central KMP publications are for Gradle consumers and do not provide a SwiftPM package or XCFramework. Manage the public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target in that separate release path.
 
 Kotlin currently labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. Dual distribution is a design goal, not a completed implementation. Validate Swift package export, transitive SDK linking, archive creation, and checksum updates in an isolated prototype before promising a stable artifact contract.
 

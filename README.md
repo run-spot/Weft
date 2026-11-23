@@ -12,7 +12,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early, local prototype. `weft scaffold` creates a decision-recorded module layout, not a ready-to-build Android or iOS app. Gradle templates and a publishable bridge library are later milestones.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:map`, `:push`, and `:login` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
 
 ## Start here
 
@@ -21,6 +21,8 @@ Weft is an early, local prototype. `weft scaffold` creates a decision-recorded m
 - [Module layout](docs/architecture/module-layout.md)
 - [Apple interop and distribution](docs/architecture/apple-interop.md)
 - [Bridge library contract](docs/architecture/bridge-library.md)
+- [Bridge library modules](docs/architecture/library-modules.md)
+- [Maven Central publishing](docs/architecture/maven-central-publishing.md)
 - [Backend choices](docs/architecture/backend.md)
 - [Toolchain policy](docs/architecture/toolchain-policy.md)
 - [RunTheSpot case study](docs/reference/runthespot.md)
@@ -38,6 +40,26 @@ python3 scripts/weft.py verify
 ```
 
 The scaffold records architecture choices and creates the planned module tree. It deliberately does not invent Kotlin, AGP, Compose, or Xcode versions; choose a version tuple from the reviewed compatibility policy before adding build scripts.
+
+## Build the bridge libraries
+
+The Gradle workspace includes independent Kotlin Multiplatform libraries for map, push notifications, and login. Their initial artifact coordinates are:
+
+~~~text
+io.github.run-spot.weft:map:0.1.0-SNAPSHOT
+io.github.run-spot.weft:push:0.1.0-SNAPSHOT
+io.github.run-spot.weft:login:0.1.0-SNAPSHOT
+~~~
+
+The Central namespace must be verified before the first release. The current modules contain publication and target configuration only; do not release them until the module milestones in their `AGENTS.md` files are complete.
+
+~~~bash
+./gradlew projects
+./gradlew verify
+./gradlew :map:publishToMavenLocal
+~~~
+
+See [Maven Central publishing](docs/architecture/maven-central-publishing.md) for credentials, signing, and the release workflow. Maven Central KMP publications include target artifacts for Gradle consumers; SwiftPM XCFramework distribution is a separate milestone.
 
 ## Skills
 

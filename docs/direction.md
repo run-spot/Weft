@@ -21,7 +21,8 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 2. **How to build it:** describe module ownership, platform boundaries, networking, state, testing, and release practices.
 3. **A project harness:** select a profile, generate a directory structure and decision record, and verify that the output matches the profile.
 4. **Agent skills:** guide architecture, scaffolding, Apple interop, and architecture review as separate tasks.
-5. **A KMP bridge library:** add this after validating a real Android/iOS SDK pair and its distribution path.
+5. **KMP bridge libraries:** organize capability libraries as independent KMP artifacts, then validate a real Android/iOS SDK pair and its distribution path before releasing each one.
+6. **A library build harness:** share Gradle conventions, publication metadata, and release gates across the independent artifacts.
 
 ## Principles
 
@@ -44,9 +45,10 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 ### Later milestones
 
 - Add buildable CMP and KMP-core templates using officially compatible version tuples.
+- Implement the first real bridge API and platform adapters, then validate them through a separate consumer project.
 - Create a minimal bridge pilot with a SwiftPM Objective-C-visible façade.
 - Select an SDK pair that provides the same user-facing capability on Android and iOS, then verify its API and distribution.
-- After validation, automate separate KMP Maven Central and SwiftPM XCFramework releases.
+- After validation, release the KMP artifacts to Maven Central and automate separate SwiftPM XCFramework distribution.
 
 ## First release acceptance criteria
 
