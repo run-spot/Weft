@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Weft documents and scaffolds KMP/CMP projects and hosts independent KMP bridge libraries. It is not tied to the RunTheSpot product domain. Architecture docs are the source of truth; skills route work through those docs, and the CLI turns a selected profile into a reviewable directory skeleton.
+Weft documents and scaffolds KMP/CMP projects and hosts independent KMP bridge libraries. Architecture docs are the source of truth; skills route work through those docs, and the CLI turns a selected profile into a reviewable directory skeleton.
 
 ## Workflow
 

@@ -24,4 +24,4 @@ Produce a concise architecture decision with:
 5. Toolchain status and unanswered compatibility questions.
 6. Alternatives considered and observable signals for revisiting the decision.
 
-Do not treat RunTheSpot's domain, libraries, backend, or module count as the default. Label evidence as observed, validated, or hypothetical. When a required product choice is missing, use a reversible default only if context supports it; otherwise record the decision as open.
+Do not treat any previous project's domain, libraries, backend, or module count as the default. Label evidence as observed, validated, or hypothetical. When a required product choice is missing, use a reversible default only if context supports it; otherwise record the decision as open.

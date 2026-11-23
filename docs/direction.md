@@ -28,7 +28,7 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 
 - **Record decisions first.** Decide whether to share UI and whether to run a server before generating code.
 - **Offer choices instead of one universal structure.** Explain the costs and alternatives for each recommended profile.
-- **Keep evidence and limits together.** Distinguish observed RunTheSpot behavior, reproduced results, and unverified hypotheses.
+- **Keep evidence and limits together.** Distinguish project observations, reproduced results, and unverified hypotheses.
 - **Keep common APIs platform-neutral.** Android SDK concepts may inform compatibility, but Android-only types must not appear in common APIs.
 - **Date and source changing version claims.** For AGP 9+, distinguish the Kotlin Gradle Plugin compatibility table from actual build results.
 - **State what the generator produces.** The current scaffold creates module directories and decision records; it does not claim to generate a buildable app.

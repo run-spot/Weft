@@ -4,7 +4,6 @@
 
 - [Direction and delivery plan](direction.md)
 - [Open questions](open-questions.md)
-- [RunTheSpot case study](reference/runthespot.md)
 
 ## Architecture
 

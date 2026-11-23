@@ -22,12 +22,12 @@ mavenPublishing {
 
         developers {
             developer {
-                id.set("run-spot")
-                name.set("RunTheSpot")
-                email.set("team@thespot.run")
-                url.set("https://github.com/run-spot")
-                organization.set("Squad : Run the spot")
-                organizationUrl.set("https://github.com/run-spot")
+                id.set("weft-maintainers")
+                name.set("Weft Maintainers")
+                email.set(providers.gradleProperty("POM_DEVELOPER_EMAIL").get())
+                url.set("https://github.com/run-spot/Weft")
+                organization.set("Weft")
+                organizationUrl.set("https://github.com/run-spot/Weft")
             }
         }
 

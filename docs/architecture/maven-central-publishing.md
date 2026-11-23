@@ -7,12 +7,14 @@ This repository prepares independent Maven Central publications for `:map`, `:pu
 - `build-logic` applies one KMP convention and one Maven publication convention to each library.
 - `GROUP` is initially `io.github.run-spot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
 - Each module publishes an artifact ID matching its Gradle project name (`map`, `push`, or `login`) and the KMP Android and iOS target publications.
-- POM metadata includes the Apache-2.0 license, RunTheSpot developer identity, and GitHub SCM coordinates.
+- POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
 - `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
 
 The build uses the Vanniktech Maven Publish Gradle plugin, which is a community plugin and is also used by Kotlin's current Multiplatform Maven Central tutorial. Sonatype does not provide an official Gradle publishing plugin.
 
-The `io.github.run-spot` namespace is a proposed coordinate based on the GitHub organization. A maintainer must verify that namespace and confirm that RunTheSpot can publish under it in Maven Central before creating a release. Do not work around an unavailable namespace by publishing under a personal account.
+The `io.github.run-spot` namespace is a proposed coordinate based on the GitHub organization. A maintainer must verify that the organization can publish under it in Maven Central before creating a release. Do not work around an unavailable namespace by publishing under a personal account.
+
+The checked-in developer email is a reserved `.invalid` address for local POM validation. Set the repository Actions variable `WEFT_DEVELOPER_EMAIL` to a public maintainer contact before publishing. The release workflow fails when this value is missing and writes it into the publication POM.
 
 ## Local checks
 
@@ -30,14 +32,15 @@ Each library is released independently. Publish a GitHub release with a module-p
 
 The release is blocked until the selected library has completed its module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
 
-## Required GitHub Actions secrets
+## Required GitHub Actions configuration
 
-Configure these repository or environment secrets before using the release workflow:
+Configure these repository or environment values before using the release workflow:
 
 - `MAVEN_CENTRAL_USERNAME`: Central Portal user token username.
 - `MAVEN_CENTRAL_PASSWORD`: Central Portal user token password.
 - `SIGNING_IN_MEMORY_KEY`: ASCII-armored GPG private key used to sign all publications.
 - `SIGNING_IN_MEMORY_KEY_PASSWORD`: passphrase for the private key.
+- `WEFT_DEVELOPER_EMAIL`: repository Actions variable containing the public maintainer contact included in the publication POM.
 
 The workflow maps them to Gradle project properties using `ORG_GRADLE_PROJECT_...`. Upload the public signing key to a supported key server as required by Central Portal. Never store the private key or Central credentials in the repository.
 

@@ -22,7 +22,6 @@ REQUIRED_DOCS = [
     "docs/architecture/bridge-library.md",
     "docs/architecture/backend.md",
     "docs/architecture/toolchain-policy.md",
-    "docs/reference/runthespot.md",
     "docs/harness.md",
 ]
 REQUIRED_SKILLS = [
