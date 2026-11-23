@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "cmp-client",
+  "title": "Compose Multiplatform client",
+  "description": "Share most Android and iOS UI with Compose Multiplatform and keep native app shells separate.",
+  "uiSharing": "compose",
+  "backend": "none",
+  "modules": [
+    {
+      "path": "androidApp",
+      "kind": "android-application",
+      "responsibility": "Android application entry, Activity, manifest, variants, and signing; depends on composeApp.",
+      "sourceSets": ["main"]
+    },
+    {
+      "path": "iosApp",
+      "kind": "ios-application",
+      "responsibility": "Xcode project, SwiftUI wrapper, and Apple app-level integration.",
+      "sourceSets": []
+    },
+    {
+      "path": "composeApp",
+      "kind": "compose-multiplatform-app",
+      "responsibility": "Shared Compose root, client composition, and iOS framework target.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "shared/core",
+      "kind": "kmp-library",
+      "responsibility": "Shared client contracts and network, storage, and platform adapters.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "shared/feature",
+      "kind": "kmp-feature",
+      "responsibility": "Feature contracts, state, and client behavior organized by capability.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    }
+  ]
+}

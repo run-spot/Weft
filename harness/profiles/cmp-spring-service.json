@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "cmp-spring-service",
+  "title": "Compose Multiplatform with Spring service",
+  "description": "Share client UI with Compose Multiplatform and add an independently configured Spring Boot server.",
+  "uiSharing": "compose",
+  "backend": "spring-boot",
+  "modules": [
+    {
+      "path": "androidApp",
+      "kind": "android-application",
+      "responsibility": "Android application entry, Activity, manifest, variants, and signing; depends on composeApp.",
+      "sourceSets": ["main"]
+    },
+    {
+      "path": "iosApp",
+      "kind": "ios-application",
+      "responsibility": "Xcode project, SwiftUI wrapper, and Apple app-level integration.",
+      "sourceSets": []
+    },
+    {
+      "path": "composeApp",
+      "kind": "compose-multiplatform-app",
+      "responsibility": "Shared Compose root, client composition, and iOS framework target.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "shared/core",
+      "kind": "kmp-library",
+      "responsibility": "Shared client contracts and network, storage, and platform adapters.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "shared/feature",
+      "kind": "kmp-feature",
+      "responsibility": "Client feature contracts and behavior organized by capability.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "serverApp",
+      "kind": "spring-boot-application",
+      "responsibility": "Server entry point, Spring configuration, and deployment assembly.",
+      "sourceSets": ["main"]
+    },
+    {
+      "path": "server/feature",
+      "kind": "server-feature",
+      "responsibility": "Server use cases, HTTP adapters, persistence, and migrations.",
+      "sourceSets": ["main", "test"]
+    }
+  ]
+}

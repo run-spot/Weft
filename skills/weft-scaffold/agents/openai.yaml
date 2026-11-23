@@ -1,0 +1,3 @@
+interface:
+  display_name: "Weft Scaffold"
+  short_description: "Generate a Weft project layout"

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "kmp-core-native-ui",
+  "title": "KMP core with native UI",
+  "description": "Share Kotlin domain and data behavior while keeping Android and iOS UI native.",
+  "uiSharing": "native",
+  "backend": "none",
+  "modules": [
+    {
+      "path": "androidApp",
+      "kind": "android-application",
+      "responsibility": "Android application entry, Activity, manifest, variants, and signing.",
+      "sourceSets": ["main"]
+    },
+    {
+      "path": "iosApp",
+      "kind": "ios-application",
+      "responsibility": "Xcode project, SwiftUI app, and Apple app-level integration.",
+      "sourceSets": []
+    },
+    {
+      "path": "shared/core",
+      "kind": "kmp-library",
+      "responsibility": "Shared Kotlin core contracts and platform adapters.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "shared/feature",
+      "kind": "kmp-feature",
+      "responsibility": "Feature contracts and use cases shared by the native apps.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    }
+  ]
+}

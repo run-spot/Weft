@@ -1,0 +1,10 @@
+.DS_Store
+.gradle/
+.kotlin/
+build/
+out/
+.idea/
+__pycache__/
+local.properties
+*.xcuserstate
+DerivedData/

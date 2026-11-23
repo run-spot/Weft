@@ -1,0 +1,3 @@
+interface:
+  display_name: "Weft Apple Bridge"
+  short_description: "Connect KMP and Apple SDKs"

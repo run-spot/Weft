@@ -1,0 +1,26 @@
+# Open questions
+
+Resolve these before public project operations or a real library release.
+
+## Project operations
+
+- Which license should cover the source and documentation: Apache-2.0, MIT, or separate licenses?
+- Should Weft skills target Codex only, or should we validate compatibility with other Agent Skills hosts?
+
+## Templates
+
+- Should the first buildable template share UI with CMP or keep native UI over a KMP core?
+- Which minimum iOS, Android SDK, and Xcode versions match the intended users?
+- If the Spring example is included, should client/server contracts come from shared KMP source, generated OpenAPI, or a separate contract module?
+
+## Bridge library
+
+- Which iOS Swift SDK and Android SDK should the first pilot connect?
+- Should compatibility with an Android API preserve behavior only, or also naming and call shape?
+- How should the Maven Central group ID, SwiftPM package repository, and XCFramework hosting be managed?
+- Until Kotlin SwiftPM import stabilizes, should the bridge remain experimental or also support an Objective-C façade with CocoaPods/local package integration?
+
+## Version policy
+
+- Should only officially compatible tuples be marked stable while versions observed in RunTheSpot remain candidates?
+- Who owns the compatibility matrix and how often should it be reviewed?
