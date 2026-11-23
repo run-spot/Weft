@@ -2,15 +2,15 @@
 
 ## Purpose
 
-Weft documents and scaffolds KMP/CMP projects. It is not tied to the RunTheSpot product domain. Architecture docs are the source of truth; skills route work through those docs, and the CLI turns a selected profile into a reviewable directory skeleton.
+Weft documents and scaffolds KMP/CMP projects and hosts independent KMP bridge libraries. It is not tied to the RunTheSpot product domain. Architecture docs are the source of truth; skills route work through those docs, and the CLI turns a selected profile into a reviewable directory skeleton.
 
 ## Workflow
 
-1. Fetch remote refs before reviewing or changing repository work: git fetch --all --prune.
-2. Read the relevant page in docs/README.md and the nearest AGENTS.md.
+1. Fetch remote refs before reviewing or changing repository work: `git fetch --all --prune`.
+2. Read the relevant page in `docs/README.md` and the nearest `AGENTS.md`.
 3. Separate verified facts, Weft recommendations, and open decisions. Add an official source and review date to toolchain claims.
-4. Update profiles, scaffold behavior, docs, or skills together when their contract changes.
-5. Run ./scripts/verify.sh after changing the harness or skills.
+4. Update profiles, scaffold behavior, docs, skills, Gradle conventions, and module milestones together when their contract changes.
+5. Run `./scripts/verify.sh` after changing the harness or skills, and `./gradlew verify` after changing Gradle builds, modules, or publication metadata.
 
 ## Repository language
 
@@ -33,6 +33,20 @@ The official Kotlin/Gradle/AGP compatibility table is authoritative for supporte
 
 ~~~bash
 ./scripts/verify.sh
+./gradlew verify
 ~~~
 
-This checks profile manifests, required docs, skill frontmatter, Markdown links, and generated project layouts. It does not build an Android app, an iOS framework, or a server.
+The script checks profile manifests, required docs, skill frontmatter, Markdown links, and generated project layouts. The Gradle task checks library modules and Maven publication metadata. Neither task publishes artifacts. Build and publish Apple XCFrameworks only from a macOS release job.
+
+## Gradle libraries and release safety
+
+- `build-logic` owns shared KMP and Maven Central conventions; read its nearest `AGENTS.md` before changing conventions.
+- `map`, `push`, and `login` are separate publication units with independent milestones and artifact IDs.
+- Keep credentials and signing keys out of tracked files. Configure them as Gradle properties or GitHub Actions secrets.
+- Do not run a Maven Central publication task unless the maintainer explicitly requests a release. Published Central coordinates are immutable.
+
+## Gradle library map
+
+- `build-logic`: shared KMP target, toolchain, POM, and signing conventions.
+- `:map`, `:push`, and `:login`: independent capability artifacts with their own milestone checklists.
+- The modules share build conventions only. Add library-to-library dependencies or a shared artifact only after a real public API requires them.

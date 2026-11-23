@@ -1,0 +1,42 @@
+name: Stage Maven Central release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maven-central-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: startsWith(github.ref, 'refs/tags/map-v') || startsWith(github.ref, 'refs/tags/push-v') || startsWith(github.ref, 'refs/tags/login-v')
+    runs-on: ubuntu-latest
+    env:
+      ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+      ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+      ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+      ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - name: Install Android SDK platform
+        run: sdkmanager "platforms;android-36"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Stage release in Central Portal
+        run: |
+          case "$GITHUB_REF_NAME" in
+            map-v*) MODULE=map; VERSION="${GITHUB_REF_NAME#map-v}" ;;
+            push-v*) MODULE=push; VERSION="${GITHUB_REF_NAME#push-v}" ;;
+            login-v*) MODULE=login; VERSION="${GITHUB_REF_NAME#login-v}" ;;
+            *) echo "Unsupported release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
+          esac
+          test -n "$VERSION"
+          ./gradlew "-PVERSION_NAME=$VERSION" ":$MODULE:publishToMavenCentral"

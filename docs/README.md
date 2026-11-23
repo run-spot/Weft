@@ -12,6 +12,8 @@
 - [Module layout](architecture/module-layout.md)
 - [Apple SDK bridges and distribution](architecture/apple-interop.md)
 - [KMP bridge library contract](architecture/bridge-library.md)
+- [Bridge library modules](architecture/library-modules.md)
+- [Maven Central publishing](architecture/maven-central-publishing.md)
 - [Backend choices and Spring setup](architecture/backend.md)
 - [Toolchain version policy](architecture/toolchain-policy.md)
 
