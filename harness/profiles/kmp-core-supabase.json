@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "kmp-core-supabase",
+  "title": "KMP core with Kotlin platform UI and Supabase",
+  "description": "Share Kotlin domain and data behavior, keep app UI in Kotlin, and use Supabase Auth and managed backend services.",
+  "uiSharing": "kotlin-platform",
+  "backend": "supabase",
+  "modules": [
+    {
+      "path": "androidApp",
+      "kind": "android-application",
+      "responsibility": "Android application entry, Activity, manifest, variants, and signing; app UI and lifecycle behavior stay in Kotlin.",
+      "sourceSets": ["main"]
+    },
+    {
+      "path": "iosApp",
+      "kind": "ios-application",
+      "responsibility": "Xcode project and minimal Swift bootstrap; product UI, startup policy, and lifecycle behavior stay in Kotlin.",
+      "sourceSets": []
+    },
+    {
+      "path": "shared/core",
+      "kind": "kmp-library",
+      "responsibility": "Shared Kotlin core contracts and platform adapters.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "shared/feature",
+      "kind": "kmp-feature",
+      "responsibility": "Feature contracts, use cases, and Kotlin app behavior shared by the platform shells.",
+      "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "supabase",
+      "kind": "supabase-project",
+      "responsibility": "Supabase project configuration, database migrations, RLS policies, and Edge Functions; credentials are provisioned outside tracked files.",
+      "sourceSets": []
+    }
+  ]
+}

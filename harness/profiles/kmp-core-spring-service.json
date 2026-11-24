@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "kmp-core-native-ui",
-  "title": "KMP core with Kotlin platform UI",
-  "description": "Share Kotlin domain and data behavior while implementing app UI and lifecycle in Kotlin behind thin native shells.",
+  "id": "kmp-core-spring-service",
+  "title": "KMP core with Kotlin platform UI and Spring service",
+  "description": "Share Kotlin domain and data behavior, keep app UI in Kotlin, and operate a separate Spring Boot backend with PKCE-compatible authentication.",
   "uiSharing": "kotlin-platform",
-  "backend": "none",
+  "backend": "spring-boot",
   "modules": [
     {
       "path": "androidApp",
@@ -29,6 +29,18 @@
       "kind": "kmp-feature",
       "responsibility": "Feature contracts, use cases, and Kotlin app behavior shared by the platform shells.",
       "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "serverApp",
+      "kind": "spring-boot-application",
+      "responsibility": "Spring server entry point, configuration, authentication integration, and deployment assembly.",
+      "sourceSets": ["main"]
+    },
+    {
+      "path": "server/feature",
+      "kind": "server-feature",
+      "responsibility": "Server use cases, HTTP adapters, persistence, and migrations.",
+      "sourceSets": ["main", "test"]
     }
   ]
 }

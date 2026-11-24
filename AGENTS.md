@@ -18,13 +18,14 @@ Write tracked repository content in English, including documentation, skills, CL
 
 ## Architecture invariants
 
-- Choose the sharing boundary from product needs; do not default every project to shared UI or a server.
+- Choose the UI-sharing boundary from product needs; every Weft app profile must select either a Spring Boot backend or Supabase.
+- Use OAuth 2.0 Authorization Code with PKCE for native app sign-in. This is a Weft architecture policy; PKCE itself does not require an application backend.
 - Application modules use the strict direct-dependency allowlist in `harness/dependency-policy.json`; do not add one-off third-party libraries.
 - Kotlin owns app startup, `UIApplicationDelegate`-level behavior, app UI, and business logic. Swift app code is limited to a thin Xcode bootstrap, widgets/extensions, or the approved Objective-C-visible SDK façade.
 - Keep Android and iOS entry points distinct from shared implementation where the selected profile requires it.
 - Keep Android framework types out of commonMain contracts. Android API familiarity may guide semantics, but must not leak Context, Activity, or AndroidX types into common APIs.
 - Treat SwiftPM import, Kotlin framework export, and Swift implementation of Kotlin contracts as separate interop directions.
-- Treat backend: none as a first-class profile. Spring Boot is an optional server module, not a mandatory part of KMP.
+- Treat `backend: spring-boot` and `backend: supabase` as the only supported app profile values. Ask whether the team will operate a separate server: choose Spring Boot for that path and Supabase when it will not.
 - A scaffold is not build-ready unless its Gradle/Xcode files and CI prove that claim. The current CLI only generates a structural scaffold.
 
 ## Toolchain policy

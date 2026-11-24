@@ -6,7 +6,7 @@ Weft provides KMP/CMP architecture choices for Android and iOS apps as documenta
 
 ## The problem
 
-Starting a KMP/CMP project requires teams to decide how much code to share, whether to share UI with Compose Multiplatform, how iOS-native SDKs connect, where module boundaries belong, whether a server is needed, and which toolchain versions work together. Tutorials usually focus on one sample. Production repositories mix product-specific decisions with experiments, making them difficult to copy safely.
+Starting a KMP/CMP project requires teams to decide how much code to share, whether to share UI with Compose Multiplatform, how iOS-native SDKs connect, where module boundaries belong, whether they will operate a separate server or use Supabase, and which toolchain versions work together. Tutorials usually focus on one sample. Production repositories mix product-specific decisions with experiments, making them difficult to copy safely.
 
 ## Audience
 
@@ -17,7 +17,7 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 
 ## What We provide
 
-1. **What to build:** compare Kotlin platform-specific UI over a shared KMP core, shared CMP UI, and an optional server.
+1. **What to build:** compare Kotlin platform-specific UI over a shared KMP core with CMP shared UI, then choose a required Spring Boot or Supabase backend.
 2. **How to build it:** describe module ownership, platform boundaries, networking, state, testing, and release practices.
 3. **A project harness:** select a profile, generate a directory structure and decision record, and verify that the output matches the profile.
 4. **Agent skills:** guide architecture, scaffolding, Apple interop, and architecture review as separate tasks.
@@ -26,7 +26,8 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 
 ## Principles
 
-- **Record decisions first.** Decide whether to share UI and whether to run a server before generating code.
+- **Record decisions first.** Decide whether to share UI, then answer whether the team will operate a separate server: yes selects Spring Boot; no selects Supabase.
+- **Require native PKCE sign-in.** Weft app profiles record OAuth 2.0 Authorization Code with PKCE. This is Weft policy; PKCE itself does not require an application backend.
 - **Offer choices instead of one universal structure.** Explain the costs and alternatives for each recommended profile.
 - **Keep evidence and limits together.** Distinguish project observations, reproduced results, and unverified hypotheses.
 - **Keep common APIs platform-neutral.** Android SDK concepts may inform compatibility, but Android-only types must not appear in common APIs.
@@ -39,7 +40,7 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 ### First milestone
 
 - Document project shapes, module boundaries, backend choices, Apple interop, and toolchain policy.
-- Provide three Android/iOS project profiles.
+- Provide four Android/iOS project profiles covering two UI-sharing modes and the Spring Boot/Supabase backend choice.
 - Provide the plan, scaffold, and verify CLI commands with CI checks.
 - Connect four Codex skills to the docs and CLI.
 
@@ -53,7 +54,7 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 
 ## First release acceptance criteria
 
-- Users can choose one of three profiles and understand its architectural consequences.
+- Users can choose one of four profiles, answer the separate-server question, and understand the backend and UI-sharing consequences.
 - The scaffold consistently creates the selected module map and a WEFT.md decision record.
 - Verification catches unknown profiles, missing modules, unfinished skills, missing required docs, and unapproved direct app dependencies.
 - Documentation does not conflate SwiftPM import with Kotlin framework distribution.

@@ -13,6 +13,10 @@ The bridge-library workspace is a multi-project Gradle build inside the Weft rep
 
 All publications use the group `run.thespot.weft` and the shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. The KMP module skeletons intentionally contain no public API or vendor SDK; they are not release candidates.
 
+## Login capability roadmap
+
+The `:weft-login` contract will use OAuth 2.0 Authorization Code with PKCE for native sign-in. It must support the Supabase Auth exchange and a PKCE-capable OIDC issuer for Spring-backed profiles, while keeping app modules on the approved Weft/Ktor/Ktorfit allowlist. M1 defines provider-neutral results and configuration; M2 implements system-browser callbacks, verifier/session storage, and the provider adapters; M3 verifies both provider paths in a separate consumer. PKCE is a Weft sign-in policy and does not inherently require an application backend.
+
 ## Source ownership
 
 Each module uses the standard KMP source-set boundaries:

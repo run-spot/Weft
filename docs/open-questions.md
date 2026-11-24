@@ -10,7 +10,9 @@ Resolve these before public project operations or a real library release.
 
 - Should the first buildable template share all UI with CMP or use Kotlin platform-specific UI over a shared KMP core?
 - Which minimum iOS, Android SDK, and Xcode versions match the intended users?
-- If the Spring example is included, should client/server contracts come from shared KMP source, generated OpenAPI, or a separate contract module?
+- For the first Spring auth template, should Weft host Spring Authorization Server or document an external PKCE-capable OIDC issuer as the default?
+- Should client/server contracts come from shared KMP source, generated OpenAPI, or a separate contract module?
+- Which Supabase authentication and data-access capabilities should `weft-login` cover first without adding a direct Supabase SDK dependency to apps?
 
 ## Bridge library
 

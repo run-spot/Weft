@@ -2,11 +2,12 @@
 
 **Weft is an architecture and project harness for Kotlin Multiplatform (KMP) and Compose Multiplatform (CMP).**
 
-Weft helps a team answer three questions before generating project code:
+Weft helps a team answer four questions before generating project code:
 
 1. What should this product share across Android and iOS?
 2. How should shared and native code communicate?
-3. Which modules should own each responsibility?
+3. Will the team operate a separate server (Spring Boot), or use Supabase?
+4. Which modules should own each responsibility?
 
 Weft combines architecture guidance, focused Codex skills, project profiles, and a structural scaffold CLI. Its recommendations are organized around explicit product decisions and reusable platform boundaries.
 
@@ -33,13 +34,13 @@ Weft is an early open-source project. Its CLI creates a decision-recorded app la
 
 ```bash
 python3 scripts/weft.py profiles
-python3 scripts/weft.py plan --profile cmp-client
-python3 scripts/weft.py scaffold --profile cmp-client --name sample-app --output /tmp/sample-app
+python3 scripts/weft.py plan --profile cmp-supabase
+python3 scripts/weft.py scaffold --profile cmp-supabase --name sample-app --output /tmp/sample-app
 python3 scripts/weft.py verify --project /tmp/sample-app
 python3 scripts/weft.py verify
 ```
 
-The scaffold records architecture choices and creates the planned module tree. It deliberately does not invent Kotlin, AGP, Compose, or Xcode versions; choose a version tuple from the reviewed compatibility policy before adding build scripts.
+The scaffold records architecture choices and creates the planned module tree. Every profile selects Spring Boot or Supabase and records OAuth 2.0 Authorization Code with PKCE for native sign-in. This is a Weft policy, not a protocol requirement for PKCE. The scaffold deliberately does not invent Kotlin, AGP, Compose, or Xcode versions; choose a version tuple from the reviewed compatibility policy before adding build scripts.
 
 ## Build the bridge libraries
 
