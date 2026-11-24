@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "cmp-client",
-  "title": "Compose Multiplatform client",
-  "description": "Share most Android and iOS UI with Compose Multiplatform and keep native app shells separate.",
+  "id": "cmp-supabase",
+  "title": "Compose Multiplatform with Supabase",
+  "description": "Share most Android and iOS UI with Compose Multiplatform and use Supabase Auth and managed backend services.",
   "uiSharing": "compose",
-  "backend": "none",
+  "backend": "supabase",
   "modules": [
     {
       "path": "androidApp",
@@ -35,6 +35,12 @@
       "kind": "kmp-feature",
       "responsibility": "Feature contracts, state, and client behavior organized by capability.",
       "sourceSets": ["commonMain", "androidMain", "iosMain"]
+    },
+    {
+      "path": "supabase",
+      "kind": "supabase-project",
+      "responsibility": "Supabase project configuration, database migrations, RLS policies, and Edge Functions; credentials are provisioned outside tracked files.",
+      "sourceSets": []
     }
   ]
 }

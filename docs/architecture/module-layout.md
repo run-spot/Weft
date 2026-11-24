@@ -33,7 +33,22 @@ shared/
 
 For AGP 9+, do not apply the Android application plugin and KMP Android library configuration to the same module. Use com.android.kotlin.multiplatform.library for a KMP Android target such as composeApp, and keep androidApp as a separate com.android.application module. The default Weft profile places the app entry Activity and manifest in the Android shell. If an existing project places them in the KMP library's Android source set, validate manifest merging and install/build behavior in CI and record the decision.
 
-## CMP with a Spring server
+## Supabase backend boundary
+
+Both UI-sharing profiles can use Supabase. Keep its deployment configuration outside Gradle application modules:
+
+~~~text
+supabase/
+  config.toml
+  migrations/
+  functions/<function>/
+~~~
+
+Database policies and migrations are reviewed and deployed with the Supabase CLI. Edge Functions own trusted server-side work that needs secret keys. Local environment files and production secrets are provisioned outside tracked source. App modules use `weft-login` and approved Ktor/Ktorfit APIs; they do not add the Supabase SDK directly under the strict application dependency policy.
+
+## Spring Boot backend
+
+For a CMP app, use the layout below. For a KMP-core app, omit `composeApp/`; keep the platform UI in the Kotlin-owned Android and iOS app implementations while retaining `shared/core/`, `shared/feature/`, `serverApp/`, and `server/feature/`.
 
 ~~~text
 androidApp/
@@ -46,6 +61,8 @@ serverApp/                  # Spring Boot application, configuration, and wiring
 server/
   feature/<capability>/     # server use cases, persistence, and HTTP adapters
 ~~~
+
+The Spring profile owns the backend path. It may use Spring Authorization Server with PKCE or validate tokens from a separately operated PKCE-capable OIDC issuer; record which system issues and validates tokens.
 
 - Add a JVM target to shared contracts only when the server benefits from consuming them.
 - Apply Spring Boot entry-point and plugin configuration in the non-KMP serverApp module.
@@ -72,4 +89,4 @@ Create a module when at least one of these is true:
 - It can be tested, released, or reused independently.
 - It has a measurable build-parallelism or team-ownership benefit.
 
-Start with app, core, feature, and optional server boundaries. Do not optimize for module count.
+Start with app, core, feature, and the selected backend boundary. A Weft app profile always selects Spring Boot or Supabase. Do not optimize for module count.

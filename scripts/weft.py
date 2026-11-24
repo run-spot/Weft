@@ -49,11 +49,16 @@ REQUIRED_SKILL_RULES = {
         "app UI, state, and business behavior in Kotlin",
         "policy blocker",
         "Kotlin/Swift ownership boundaries",
+        "A backend choice is mandatory: Spring Boot or Supabase",
+        "PKCE itself does not require an application backend",
+        "If the team will operate a separate server, choose Spring Boot; otherwise choose Supabase",
     ),
     "weft-scaffold": (
         "dependency-policy.md",
         "strict direct-dependency allowlist",
         "ios_implementation: kotlin-first",
+        "ask whether the team will operate a separate server",
+        "do not treat PKCE itself as requiring a backend",
     ),
     "weft-apple-bridge": (
         "dependency-policy.md",
@@ -69,6 +74,8 @@ REQUIRED_SKILL_RULES = {
         "Kotlin owns iOS app startup",
         "Objective-C-visible SDK façade",
         "Inventory every Swift source file",
+        "Every Weft app must choose Spring Boot or Supabase",
+        "OAuth 2.0 Authorization Code with PKCE",
     ),
 }
 
@@ -94,6 +101,8 @@ def load_profiles() -> dict[str, dict[str, Any]]:
             raise WeftError(f"{path.name} is missing fields: {', '.join(sorted(missing))}")
         if profile["schemaVersion"] != 1:
             raise WeftError(f"{path.name} uses unsupported schemaVersion {profile['schemaVersion']}")
+        if profile["backend"] not in {"spring-boot", "supabase"}:
+            raise WeftError(f"{path.name} backend must be spring-boot or supabase")
         if profile["id"] in profiles:
             raise WeftError(f"duplicate profile id: {profile['id']}")
         if not isinstance(profile["modules"], list) or not profile["modules"]:
@@ -109,6 +118,15 @@ def load_profiles() -> dict[str, dict[str, Any]]:
             seen_paths.add(str(module_path))
             if not isinstance(module["sourceSets"], list):
                 raise WeftError(f"{path.name}: {module['path']} sourceSets must be a list")
+        module_kinds = {module["kind"] for module in profile["modules"]}
+        if profile["backend"] == "supabase" and "supabase-project" not in module_kinds:
+            raise WeftError(f"{path.name} must include a supabase-project module")
+        if profile["backend"] == "spring-boot" and "spring-boot-application" not in module_kinds:
+            raise WeftError(f"{path.name} must include a spring-boot-application module")
+        if profile["backend"] == "supabase" and "spring-boot-application" in module_kinds:
+            raise WeftError(f"{path.name} cannot combine Supabase with a Spring Boot backend")
+        if profile["backend"] == "spring-boot" and "supabase-project" in module_kinds:
+            raise WeftError(f"{path.name} cannot combine Spring Boot with a Supabase backend")
         profiles[profile["id"]] = profile
 
     if not profiles:
@@ -129,6 +147,7 @@ def show_plan(profile: dict[str, Any]) -> None:
     print()
     print(f"- UI sharing: {profile['uiSharing']}")
     print(f"- Backend: {profile['backend']}")
+    print("- Authentication: OAuth 2.0 Authorization Code with PKCE")
     print("- Dependency policy: strict Weft/Montage/networking allowlist")
     print("- iOS implementation: Kotlin-first; Swift is limited to Xcode bootstrap, widgets/extensions, and SDK façades")
     print("- Toolchain: choose an officially compatible tuple; no versions are pinned by this plan.")
@@ -150,8 +169,19 @@ def write_module(root: Path, module: dict[str, Any]) -> None:
         "",
         f"{module['responsibility']}",
         "",
-        "This directory was generated as a structural scaffold. Add Gradle/Xcode configuration only after selecting and validating a toolchain tuple.",
     ]
+    if module["kind"] == "supabase-project":
+        readme.extend(
+            [
+                "This directory is a structural scaffold, not a deployable Supabase project. Add and validate Supabase CLI configuration, migrations, policies, and Edge Functions before deployment.",
+                "",
+                "Never commit access tokens, database passwords, OAuth client secrets, or Supabase secret/service-role keys. Use ignored local environment files and deployment secret storage.",
+            ]
+        )
+    else:
+        readme.append(
+            "This directory was generated as a structural scaffold. Add Gradle/Xcode configuration only after selecting and validating a toolchain tuple."
+        )
     if module["sourceSets"]:
         readme.extend(["", "## Planned source sets", ""])
         readme.extend(f"- `{source_set}`" for source_set in module["sourceSets"])
@@ -183,6 +213,7 @@ def scaffold(profile: dict[str, Any], name: str, output: Path) -> None:
         "generator_version: 0.1.0",
         "ui_sharing: " + profile["uiSharing"],
         "backend: " + profile["backend"],
+        "auth_flow: oauth2-authorization-code-pkce",
         "dependency_policy: strict-direct-dependency-allowlist",
         "ios_implementation: kotlin-first",
         "toolchain_status: undecided",
@@ -191,6 +222,8 @@ def scaffold(profile: dict[str, Any], name: str, output: Path) -> None:
         "",
         "- Select an exact Kotlin/Gradle/AGP/Compose/Xcode tuple using the Weft toolchain policy.",
         "- Add build scripts and CI, then verify Android and iOS targets before calling this project build-ready.",
+        "- Record the PKCE authorization issuer, app callback URLs, verifier/token storage boundary, and API token validation owner.",
+        "- Provision credentials through the selected backend's deployment secret store; never commit production secrets.",
         "- Keep app startup, UIApplicationDelegate-level behavior, app UI, and business logic in Kotlin; limit Swift app code to an Xcode bootstrap/forwarder.",
         "- Record any Swift widget/extension or Objective-C-visible SwiftPM SDK façade as a narrow platform exception.",
         "- Record platform-specific requirements and any deviations from this profile.",
@@ -246,10 +279,24 @@ def verify_toolkit(profiles: dict[str, dict[str, Any]]) -> list[str]:
     errors.extend(verify_skills())
     errors.extend(verify_relative_markdown_links())
     errors.extend(verify_repository_language())
-    required_profiles = {"kmp-core-native-ui", "cmp-client", "cmp-spring-service"}
+    required_profiles = {
+        "kmp-core-supabase",
+        "kmp-core-spring-service",
+        "cmp-supabase",
+        "cmp-spring-service",
+    }
     missing_profiles = required_profiles - set(profiles)
     if missing_profiles:
         errors.append(f"missing starter profiles: {sorted(missing_profiles)}")
+    expected_matrix = {
+        ("kotlin-platform", "spring-boot"),
+        ("kotlin-platform", "supabase"),
+        ("compose", "spring-boot"),
+        ("compose", "supabase"),
+    }
+    actual_matrix = {(profile["uiSharing"], profile["backend"]) for profile in profiles.values()}
+    if not expected_matrix <= actual_matrix:
+        errors.append("starter profiles must cover both UI-sharing modes with Spring Boot and Supabase")
     return errors
 
 
@@ -295,6 +342,11 @@ def verify_project(project_path: Path, profiles: dict[str, dict[str, Any]]) -> l
     if not profile_match or profile_match.group(1) not in profiles:
         return ["WEFT.md has a missing or unknown profile id"]
     profile = profiles[profile_match.group(1)]
+    backend_match = re.search(r"^backend:\s*(\S+)\s*$", manifest, re.MULTILINE)
+    if not backend_match or backend_match.group(1) != profile["backend"]:
+        errors.append("WEFT.md backend must match the selected profile")
+    if not re.search(r"^auth_flow:\s*oauth2-authorization-code-pkce\s*$", manifest, re.MULTILINE):
+        errors.append("WEFT.md must record OAuth 2.0 Authorization Code with PKCE")
     for module in profile["modules"]:
         module_path = project / module["path"]
         if not module_path.is_dir():

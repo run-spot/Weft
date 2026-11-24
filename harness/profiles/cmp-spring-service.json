@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "cmp-spring-service",
   "title": "Compose Multiplatform with Spring service",
-  "description": "Share client UI with Compose Multiplatform and add an independently configured Spring Boot server.",
+  "description": "Share client UI with Compose Multiplatform and operate a separate Spring Boot backend with PKCE-compatible authentication.",
   "uiSharing": "compose",
   "backend": "spring-boot",
   "modules": [

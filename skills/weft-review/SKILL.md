@@ -13,11 +13,13 @@ Inventory every Swift source file in app targets and classify it as an Xcode boo
 
 Check:
 
+- Every Weft app must choose Spring Boot or Supabase and records the matching backend in WEFT.md.
+- Native app authentication follows OAuth 2.0 Authorization Code with PKCE. Treat that as Weft policy, not as a protocol requirement for a backend; for Spring, identify the PKCE-capable issuer, and for Supabase, verify Supabase Auth and RLS boundaries.
 - Shared and native responsibilities match the selected profile.
 - Android application setup and KMP Android library setup are separate where required by AGP 9+.
 - commonMain APIs do not expose Android or Apple SDK types.
 - SwiftPM import, framework export, and reverse implementation are described as separate paths.
-- Backend modules exist only when selected, and Spring Boot remains in a separate JVM application module.
+- The selected backend module exists: Supabase profiles include a `supabase/` project boundary; Spring Boot remains in a separate JVM application module. Do not accept `backend: none` for a Weft app.
 - Every direct application dependency is in `harness/dependency-policy.json`; report any unapproved or unparsed dependency as a blocking policy violation.
 - Kotlin owns iOS app startup/delegate behavior, screens, and app logic. Swift is limited to a thin Xcode bootstrap, native widgets/extensions, or the Objective-C-visible SDK façade.
 - A Swift-only SDK bridge uses a minimal Objective-C-visible SwiftPM façade imported into KMP, with the Kotlin wrapper published as a Weft Maven artifact.
