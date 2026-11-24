@@ -35,19 +35,21 @@ After selecting a real SDK, validate the smallest useful structure:
   iosInterop/<Facade>/  # SwiftPM package with narrow Objective-C-visible façade
 ~~~
 
-Connect the common API with expect/actual or an injected platform provider when appropriate. Choose based on SDK lifecycle and testability. Do not start with a generic provider framework or combine multiple native SDKs in one artifact.
+Connect the common API with expect/actual or an injected platform provider when appropriate. Choose based on SDK lifecycle and testability. Do not start with a generic provider framework or combine multiple native SDKs in one artifact. Keep the app dependency allowlist closed: apps consume approved Weft artifacts rather than depending directly on vendor SDKs.
 
 ## Distribution units
 
 ### Maven Central
 
-Publish each capability as an independent KMP Gradle artifact for Android and KMP Gradle consumers. The initial `GROUP` is `io.github.run-spot.weft`; verify ownership of the parent `io.github.run-spot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+Publish each capability as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The initial `GROUP` is `run.thespot.weft`, with artifact IDs `weft-map`, `weft-login`, and `weft-push`. The `weft-bom` artifact aligns their versions, and releases are coordinated. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
 
 The build conventions, module coordinates, metadata, signing hooks, and staged release workflow are described in [Bridge library modules](library-modules.md) and [Maven Central publishing](maven-central-publishing.md). Nothing has been published yet.
 
 ### SwiftPM/Xcode
 
-SwiftPM consumers need a separate package and XCFramework binary distribution. Maven Central KMP publications are for Gradle consumers and do not provide a SwiftPM package or XCFramework. Manage the public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target in that separate release path.
+Use SwiftPM inside the KMP bridge build to import the Objective-C-visible SDK façade. Publish the Kotlin adapter as a `run.thespot.weft:weft-*` KMP artifact to Maven Central. This gives Android and KMP Gradle consumers the approved Weft bridge dependency; it does not bundle the Swift package or replace SwiftPM resolution needed to build and link the iOS target.
+
+If native Swift consumers need the Kotlin framework directly, that is a separate XCFramework/SwiftPM binary distribution with its own public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target.
 
 Kotlin currently labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. Dual distribution is a design goal, not a completed implementation. Validate Swift package export, transitive SDK linking, archive creation, and checksum updates in an isolated prototype before promising a stable artifact contract.
 

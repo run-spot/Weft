@@ -17,11 +17,11 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 
 ## What We provide
 
-1. **What to build:** compare native UI with a shared KMP core, shared CMP UI, and an optional server.
+1. **What to build:** compare Kotlin platform-specific UI over a shared KMP core, shared CMP UI, and an optional server.
 2. **How to build it:** describe module ownership, platform boundaries, networking, state, testing, and release practices.
 3. **A project harness:** select a profile, generate a directory structure and decision record, and verify that the output matches the profile.
 4. **Agent skills:** guide architecture, scaffolding, Apple interop, and architecture review as separate tasks.
-5. **KMP bridge libraries:** organize capability libraries as independent KMP artifacts, then validate a real Android/iOS SDK pair and its distribution path before releasing each one.
+5. **KMP bridge libraries:** organize capability libraries as separate KMP artifacts, align them with a BOM, then validate a real Android/iOS SDK pair and release the coordinated set.
 6. **A library build harness:** share Gradle conventions, publication metadata, and release gates across the independent artifacts.
 
 ## Principles
@@ -30,6 +30,7 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 - **Offer choices instead of one universal structure.** Explain the costs and alternatives for each recommended profile.
 - **Keep evidence and limits together.** Distinguish project observations, reproduced results, and unverified hypotheses.
 - **Keep common APIs platform-neutral.** Android SDK concepts may inform compatibility, but Android-only types must not appear in common APIs.
+- **Keep the application dependency set closed.** Use only Weft, Montage, approved networking, and platform foundations; add capabilities through Weft or Montage instead of introducing one-off libraries.
 - **Date and source changing version claims.** For AGP 9+, distinguish the Kotlin Gradle Plugin compatibility table from actual build results.
 - **State what the generator produces.** The current scaffold creates module directories and decision records; it does not claim to generate a buildable app.
 
@@ -54,6 +55,6 @@ Starting a KMP/CMP project requires teams to decide how much code to share, whet
 
 - Users can choose one of three profiles and understand its architectural consequences.
 - The scaffold consistently creates the selected module map and a WEFT.md decision record.
-- Verification catches unknown profiles, missing modules, unfinished skills, and missing required docs.
+- Verification catches unknown profiles, missing modules, unfinished skills, missing required docs, and unapproved direct app dependencies.
 - Documentation does not conflate SwiftPM import with Kotlin framework distribution.
 - Kotlin/AGP/Gradle support claims are traceable to official compatibility data.

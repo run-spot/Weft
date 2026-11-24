@@ -1,18 +1,19 @@
 # Maven Central Publishing
 
-This repository prepares independent Maven Central publications for `:map`, `:push`, and `:login`. The Gradle build is configured for publication, but no artifact has been published.
+This repository prepares three Kotlin Multiplatform Maven Central publications and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
 
 ## Build configuration
 
-- `build-logic` applies one KMP convention and one Maven publication convention to each library.
-- `GROUP` is initially `io.github.run-spot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
-- Each module publishes an artifact ID matching its Gradle project name (`map`, `push`, or `login`) and the KMP Android and iOS target publications.
+- `build-logic` applies one KMP convention to each library and shared Maven publication metadata to all artifacts.
+- `GROUP` is `run.thespot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
+- The KMP modules publish `weft-map`, `weft-login`, and `weft-push`, with Android and iOS target publications.
+- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the three KMP artifacts to the same release version.
 - POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
 - `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
 
 The build uses the Vanniktech Maven Publish Gradle plugin, which is a community plugin and is also used by Kotlin's current Multiplatform Maven Central tutorial. Sonatype does not provide an official Gradle publishing plugin.
 
-The `io.github.run-spot` namespace is a proposed coordinate based on the GitHub organization. A maintainer must verify that the organization can publish under it in Maven Central before creating a release. Do not work around an unavailable namespace by publishing under a personal account.
+The `run.thespot` namespace must be verified in Central Portal before creating a release. Do not work around an unavailable namespace by publishing under a personal account.
 
 The checked-in developer email is a reserved `.invalid` address for local POM validation. Set the repository Actions variable `WEFT_DEVELOPER_EMAIL` to a public maintainer contact before publishing. The release workflow fails when this value is missing and writes it into the publication POM.
 
@@ -20,17 +21,29 @@ The checked-in developer email is a reserved `.invalid` address for local POM va
 
 ~~~bash
 ./gradlew verify
-./gradlew :map:checkPomFileForKotlinMultiplatformPublication
-./gradlew :map:publishToMavenLocal
+./gradlew :weft-map:checkPomFileForKotlinMultiplatformPublication
+./gradlew :weft-map:publishToMavenLocal
+./gradlew :weft-bom:generatePomFileForMavenPublication
+./gradlew :weft-bom:publishToMavenLocal
 ~~~
 
-Repeat the module-specific POM and Maven Local checks for `:push` and `:login`. `publishToMavenLocal` is a local validation path and does not upload anything to Maven Central.
+Repeat the module-specific KMP POM and Maven Local checks for `:weft-login` and `:weft-push`. `publishToMavenLocal` is a local validation path and does not upload anything to Maven Central.
+
+Gradle consumers import the BOM and omit the versions on selected artifacts:
+
+~~~kotlin
+dependencies {
+    implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
+    implementation("run.thespot.weft:weft-map")
+    implementation("run.thespot.weft:weft-login")
+}
+~~~
 
 ## Release workflow
 
-Each library is released independently. Publish a GitHub release with a module-prefixed tag such as `map-v1.0.0`, `push-v1.0.0`, or `login-v1.0.0`. The workflow selects only that Gradle module, removes the module prefix, overrides `VERSION_NAME`, and uploads its publications to a Central Portal deployment. A maintainer reviews the validated deployment and publishes it from Central Portal. The workflow does not enable automatic publication.
+The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-map`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
 
-The release is blocked until the selected library has completed its module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
+The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
 
 ## Required GitHub Actions configuration
 
@@ -49,4 +62,5 @@ The workflow maps them to Gradle project properties using `ORG_GRADLE_PROJECT_..
 - [Kotlin Multiplatform Maven Central tutorial](https://kotlinlang.org/docs/multiplatform/multiplatform-publish-libraries-to-maven.html)
 - [Central Portal namespace registration](https://central.sonatype.org/register/namespace/)
 - [Central Portal Gradle publishing options](https://central.sonatype.org/publish/publish-portal-gradle/)
+- [Gradle Java Platform plugin](https://docs.gradle.org/current/userguide/java_platform_plugin.html)
 - [Vanniktech Gradle Maven Publish Plugin](https://github.com/vanniktech/gradle-maven-publish-plugin)

@@ -19,6 +19,8 @@ Write tracked repository content in English, including documentation, skills, CL
 ## Architecture invariants
 
 - Choose the sharing boundary from product needs; do not default every project to shared UI or a server.
+- Application modules use the strict direct-dependency allowlist in `harness/dependency-policy.json`; do not add one-off third-party libraries.
+- Kotlin owns app startup, `UIApplicationDelegate`-level behavior, app UI, and business logic. Swift app code is limited to a thin Xcode bootstrap, widgets/extensions, or the approved Objective-C-visible SDK façade.
 - Keep Android and iOS entry points distinct from shared implementation where the selected profile requires it.
 - Keep Android framework types out of commonMain contracts. Android API familiarity may guide semantics, but must not leak Context, Activity, or AndroidX types into common APIs.
 - Treat SwiftPM import, Kotlin framework export, and Swift implementation of Kotlin contracts as separate interop directions.
@@ -41,12 +43,13 @@ The script checks profile manifests, required docs, skill frontmatter, Markdown 
 ## Gradle libraries and release safety
 
 - `build-logic` owns shared KMP and Maven Central conventions; read its nearest `AGENTS.md` before changing conventions.
-- `map`, `push`, and `login` are separate publication units with independent milestones and artifact IDs.
+- `weft-map`, `weft-login`, and `weft-push` are KMP publication units with independent API milestones; `weft-bom` aligns their released versions.
 - Keep credentials and signing keys out of tracked files. Configure them as Gradle properties or GitHub Actions secrets.
 - Do not run a Maven Central publication task unless the maintainer explicitly requests a release. Published Central coordinates are immutable.
 
 ## Gradle library map
 
 - `build-logic`: shared KMP target, toolchain, POM, and signing conventions.
-- `:map`, `:push`, and `:login`: independent capability artifacts with their own milestone checklists.
-- The modules share build conventions only. Add library-to-library dependencies or a shared artifact only after a real public API requires them.
+- `:weft-map`, `:weft-login`, and `:weft-push`: capability libraries with independent API milestone checklists.
+- `:weft-bom`: metadata-only Java Platform that publishes version constraints for the three libraries.
+- The KMP modules share build conventions. Keep the BOM as version metadata; do not add library-to-library dependencies without a real public API need.

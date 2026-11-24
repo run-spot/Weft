@@ -19,4 +19,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Weft"
 
-include(":map", ":push", ":login")
+include(":weft-map", ":weft-login", ":weft-push", ":weft-bom")

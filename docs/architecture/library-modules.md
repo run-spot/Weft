@@ -1,16 +1,17 @@
 # Weft Bridge Library Modules
 
-The bridge-library workspace is a multi-project Gradle build inside the Weft repository. Each capability is an independent Kotlin Multiplatform publication with its own API, dependencies, and release readiness.
+The bridge-library workspace is a multi-project Gradle build inside the Weft repository. Each capability is a separate Kotlin Multiplatform artifact with its own API and dependencies. The BOM aligns versions, and artifacts are released as a coordinated set.
 
 ## Initial modules
 
 | Gradle path | Artifact ID | Responsibility | Current milestone |
 | --- | --- | --- | --- |
-| `:map` | `map` | Map capability contracts and platform adapters | M0: build and publication skeleton |
-| `:push` | `push` | Push registration and notification capability | M0: build and publication skeleton |
-| `:login` | `login` | Cross-platform sign-in capability | M0: build and publication skeleton |
+| `:weft-map` | `weft-map` | Map capability contracts and platform adapters | M0: build and publication skeleton |
+| `:weft-login` | `weft-login` | Cross-platform sign-in capability | M0: build and publication skeleton |
+| `:weft-push` | `weft-push` | Push registration and notification capability | M0: build and publication skeleton |
+| `:weft-bom` | `weft-bom` | Maven BOM aligning the three KMP artifacts | M0: build and publication skeleton |
 
-The initial Maven group property is `io.github.run-spot.weft`, and the development version is `0.1.0-SNAPSHOT`. The parent `io.github.run-spot` namespace must be verified in Central Portal before the first release. The module skeletons intentionally contain no public API or vendor SDK; they are not release candidates.
+All publications use the group `run.thespot.weft` and the shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. The KMP module skeletons intentionally contain no public API or vendor SDK; they are not release candidates.
 
 ## Source ownership
 
@@ -25,7 +26,7 @@ Each module uses the standard KMP source-set boundaries:
   src/iosMain/kotlin/         # Kotlin/Native adapter and Apple interop
 ~~~
 
-Only create a source-set implementation when a module milestone needs it. Keep Android and Apple SDK dependencies in their platform source sets. Do not add a cross-module `:core` or umbrella artifact until real shared API ownership requires it.
+Only create a source-set implementation when a module milestone needs it. Keep Android and Apple SDK dependencies in their platform source sets. The BOM is metadata-only and constrains all three library artifacts to the shared release version; it does not add runtime dependencies. Do not add a cross-module `:core` until real shared API ownership requires one.
 
 ## Platform targets
 

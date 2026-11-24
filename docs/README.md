@@ -14,6 +14,7 @@
 - [Bridge library modules](architecture/library-modules.md)
 - [Maven Central publishing](architecture/maven-central-publishing.md)
 - [Backend choices and Spring setup](architecture/backend.md)
+- [Application dependency policy](architecture/dependency-policy.md)
 - [Toolchain version policy](architecture/toolchain-policy.md)
 
 ## Harness

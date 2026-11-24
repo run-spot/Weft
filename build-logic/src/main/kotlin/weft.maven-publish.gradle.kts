@@ -2,13 +2,21 @@ plugins {
     id("com.vanniktech.maven.publish")
 }
 
+val capabilityName = project.name.removePrefix("weft-")
+val componentName = if (project.name == "weft-bom") "BOM" else capabilityName.replaceFirstChar { it.uppercase() }
+
 mavenPublishing {
     publishToMavenCentral()
     signAllPublications()
-
     pom {
-        name.set("Weft ${project.name.replaceFirstChar { it.uppercase() }}")
-        description.set("Kotlin Multiplatform library scaffolding for the Weft ${project.name} capability.")
+        name.set("Weft $componentName")
+        description.set(
+            if (project.name == "weft-bom") {
+                "Version platform for the Weft Kotlin Multiplatform libraries."
+            } else {
+                "Kotlin Multiplatform library for the Weft $capabilityName capability."
+            },
+        )
         inceptionYear.set("2026")
         url.set("https://github.com/run-spot/Weft")
 

@@ -15,7 +15,7 @@
     {
       "path": "iosApp",
       "kind": "ios-application",
-      "responsibility": "Xcode project, SwiftUI wrapper, and Apple app-level integration.",
+      "responsibility": "Xcode project and minimal Swift bootstrap into Kotlin; product UI and lifecycle behavior stay in composeApp.",
       "sourceSets": []
     },
     {

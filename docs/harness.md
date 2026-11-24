@@ -7,14 +7,14 @@ The Weft harness converts a selected architecture profile into a reviewable proj
 - profiles: list available profiles and descriptions.
 - plan: print a profile's modules and intent without writing files.
 - scaffold: create WEFT.md, a project README, module READMEs, and empty module/source-set directories.
-- verify: validate profile JSON, required docs, skill frontmatter, Markdown links, and generated module layouts.
+- verify: validate profile JSON, required docs, skill frontmatter, Markdown links, generated module layouts, the strict application dependency policy, and generated BOM coordinates/constraints.
 
-This version does not generate Gradle build files, an Xcode project, dependency versions, or feature code. Do not describe its output as a buildable app.
+The scaffold records `dependency_policy: strict-direct-dependency-allowlist` and `ios_implementation: kotlin-first` in WEFT.md. When Gradle build files are present, project verification checks direct dependency coordinates, `add`/`addProvider` declarations, and aliases from the default version catalog against `harness/dependency-policy.json`. Unsupported dependency notation fails closed. Skills are also checked for their required dependency and Kotlin-first Apple-platform rules. This version does not generate Gradle build files, an Xcode project, dependency versions, or feature code. Do not describe its output as a buildable app.
 
 ## Profiles
 
-- kmp-core-native-ui: share Kotlin core behavior while keeping Android UI and SwiftUI native.
-- cmp-client: share Android/iOS screens with CMP and keep native app shells separate.
+- kmp-core-native-ui: share Kotlin core behavior, implement platform-specific UI in Kotlin, and keep Swift app shells thin.
+- cmp-client: share Android/iOS screens with CMP and keep native app shells as Kotlin bootstraps.
 - cmp-spring-service: add a separate Spring Boot server to a CMP client.
 
 Profiles are JSON manifests under harness/profiles. Each profile must provide a unique ID, intended use, module list, and responsibility for each module.
@@ -27,6 +27,8 @@ WEFT.md records:
 - UI-sharing and server choices.
 - Generated modules and responsibilities.
 - The unresolved toolchain tuple and next decisions.
+- The strict application dependency policy that generated modules must follow.
+- Kotlin-first iOS ownership and the narrow permitted Swift boundaries.
 
 Update the manifest and module READMEs when changing a generated project, before treating the structure as a new template.
 

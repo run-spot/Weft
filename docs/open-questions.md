@@ -8,18 +8,19 @@ Resolve these before public project operations or a real library release.
 
 ## Templates
 
-- Should the first buildable template share UI with CMP or keep native UI over a KMP core?
+- Should the first buildable template share all UI with CMP or use Kotlin platform-specific UI over a shared KMP core?
 - Which minimum iOS, Android SDK, and Xcode versions match the intended users?
 - If the Spring example is included, should client/server contracts come from shared KMP source, generated OpenAPI, or a separate contract module?
 
 ## Bridge library
 
-- Can the `io.github.run-spot` namespace be verified and managed by the GitHub organization that owns this repository in Central Portal?
+- Can the `run.thespot` namespace be verified and managed in Central Portal before the first release?
 - Which iOS Swift SDK and Android SDK should the first pilot connect?
 - Should compatibility with an Android API preserve behavior only, or also naming and call shape?
 - Which Android minSdk and iOS deployment target should the first released artifacts support?
 - How should the SwiftPM package repository and XCFramework hosting be managed?
-- Until Kotlin SwiftPM import stabilizes, should the bridge remain experimental or also support an Objective-C façade with CocoaPods/local package integration?
+- Which SDK pair should the first SwiftPM import pilot support, and what Objective-C-visible façade does its Swift API require?
+- Which KGP version should a SwiftPM-backed bridge use? The reviewed SwiftPM guide is Alpha and specifies KGP 2.5.0-RC, while the current KMP/AGP 9+ bridge baseline pins KGP 2.4.21.
 
 ## Version policy
 
