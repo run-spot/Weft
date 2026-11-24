@@ -1,8 +1,8 @@
-# `:map` Library
+# `:weft-map` Library
 
 ## Role
 
-`map` will expose a Kotlin-first API for map capability integrations across Android and iOS. It is a separate Maven artifact: `map`.
+`weft-map` will expose a Kotlin-first API for map capability integrations across Android and iOS. It is published as `run.thespot.weft:weft-map` and version-aligned by `:weft-bom`.
 
 ## Milestones
 
@@ -20,5 +20,5 @@
 
 ## Verification
 
-- `./gradlew :map:check`
-- `./gradlew :map:checkPomFileForKotlinMultiplatformPublication`
+- `./gradlew :weft-map:check`
+- `./gradlew :weft-map:checkPomFileForKotlinMultiplatformPublication`

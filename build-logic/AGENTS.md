@@ -20,4 +20,4 @@
 ## Verification
 
 - `./gradlew verify`
-- `./gradlew :map:tasks`
+- `./gradlew :weft-map:tasks`

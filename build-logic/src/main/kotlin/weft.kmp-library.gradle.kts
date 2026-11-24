@@ -9,7 +9,7 @@ kotlin {
     explicitApi()
 
     android {
-        namespace = "io.github.runspot.weft.${project.name}"
+        namespace = "run.thespot.weft.${project.name.removePrefix("weft-")}"
         compileSdk = providers.gradleProperty("android.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("android.minSdk").get().toInt()
 

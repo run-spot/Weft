@@ -12,7 +12,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:map`, `:push`, and `:login` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:weft-map`, `:weft-login`, and `:weft-push` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
 
 ## Start here
 
@@ -24,6 +24,7 @@ Weft is an early open-source project. Its CLI creates a decision-recorded app la
 - [Bridge library modules](docs/architecture/library-modules.md)
 - [Maven Central publishing](docs/architecture/maven-central-publishing.md)
 - [Backend choices](docs/architecture/backend.md)
+- [Application dependency policy](docs/architecture/dependency-policy.md)
 - [Toolchain policy](docs/architecture/toolchain-policy.md)
 - [Harness design and profiles](docs/harness.md)
 - [Open questions](docs/open-questions.md)
@@ -42,20 +43,31 @@ The scaffold records architecture choices and creates the planned module tree. I
 
 ## Build the bridge libraries
 
-The Gradle workspace includes independent Kotlin Multiplatform libraries for map, push notifications, and login. Their initial artifact coordinates are:
+The Gradle workspace includes Kotlin Multiplatform libraries for map, login, and push notifications, plus a Java Platform BOM that aligns their versions. Their initial artifact coordinates are:
 
 ~~~text
-io.github.run-spot.weft:map:0.1.0-SNAPSHOT
-io.github.run-spot.weft:push:0.1.0-SNAPSHOT
-io.github.run-spot.weft:login:0.1.0-SNAPSHOT
+run.thespot.weft:weft-map:0.1.0-SNAPSHOT
+run.thespot.weft:weft-login:0.1.0-SNAPSHOT
+run.thespot.weft:weft-push:0.1.0-SNAPSHOT
+run.thespot.weft:weft-bom:0.1.0-SNAPSHOT
 ~~~
 
-The Central namespace must be verified before the first release. The current modules contain publication and target configuration only; do not release them until the module milestones in their `AGENTS.md` files are complete.
+Consumers can import the BOM to use the coordinated version without repeating it:
+
+~~~kotlin
+dependencies {
+    implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
+    implementation("run.thespot.weft:weft-map")
+}
+~~~
+
+The `run.thespot` Central namespace must be verified before the first release. The current modules contain publication and target configuration only; do not release them until the module milestones in their `AGENTS.md` files are complete.
 
 ~~~bash
 ./gradlew projects
 ./gradlew verify
-./gradlew :map:publishToMavenLocal
+./gradlew :weft-map:publishToMavenLocal
+./gradlew :weft-bom:publishToMavenLocal
 ~~~
 
 See [Maven Central publishing](docs/architecture/maven-central-publishing.md) for credentials, signing, and the release workflow. Maven Central KMP publications include target artifacts for Gradle consumers; SwiftPM XCFramework distribution is a separate milestone.

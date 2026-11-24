@@ -1,8 +1,8 @@
-# `:login` Library
+# `:weft-login` Library
 
 ## Role
 
-`login` will expose a Kotlin-first sign-in API across Android and iOS while preserving familiar Android call semantics where they are safe to share. It is a separate Maven artifact: `login`.
+`weft-login` will expose a Kotlin-first sign-in API across Android and iOS while preserving familiar Android call semantics where they are safe to share. It is published as `run.thespot.weft:weft-login` and version-aligned by `:weft-bom`.
 
 ## Milestones
 
@@ -20,5 +20,5 @@
 
 ## Verification
 
-- `./gradlew :login:check`
-- `./gradlew :login:checkPomFileForKotlinMultiplatformPublication`
+- `./gradlew :weft-login:check`
+- `./gradlew :weft-login:checkPomFileForKotlinMultiplatformPublication`

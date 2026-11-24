@@ -1,8 +1,8 @@
-# `:push` Library
+# `:weft-push` Library
 
 ## Role
 
-`push` will expose a Kotlin-first API for push registration and notification events across Android and iOS. It is a separate Maven artifact: `push`.
+`weft-push` will expose a Kotlin-first API for push registration and notification events across Android and iOS. It is published as `run.thespot.weft:weft-push` and version-aligned by `:weft-bom`.
 
 ## Milestones
 
@@ -20,5 +20,5 @@
 
 ## Verification
 
-- `./gradlew :push:check`
-- `./gradlew :push:checkPomFileForKotlinMultiplatformPublication`
+- `./gradlew :weft-push:check`
+- `./gradlew :weft-push:checkPomFileForKotlinMultiplatformPublication`

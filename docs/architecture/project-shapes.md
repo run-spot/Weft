@@ -6,25 +6,25 @@ KMP lets a team choose how much non-UI Kotlin code to share. CMP lets a team sha
 
 | Profile | Android UI | iOS UI | Shared code | Server |
 | --- | --- | --- | --- | --- |
-| kmp-core-native-ui | Jetpack Compose or existing Android UI | SwiftUI | Domain, data, and selected presentation logic | None |
+| kmp-core-native-ui | Kotlin UI, usually Jetpack Compose | Kotlin UI (Compose Multiplatform preferred; Kotlin/UIKit only when justified), hosted by a thin Swift bootstrap | Domain, data, and selected presentation logic | None |
 | cmp-client | Compose Multiplatform | Compose Multiplatform with a thin Swift wrapper | UI and client logic | None |
 | cmp-spring-service | Compose Multiplatform | Compose Multiplatform with a thin Swift wrapper | Client and selected contracts | Spring Boot |
 
-The last profile adds a server only when the product chooses to operate its own API. A server is not the default for cmp-client.
+The last profile adds a server only when the product chooses to operate its own API. A server is not the default for cmp-client. App screens and app lifecycle behavior stay in Kotlin in every profile.
 
 ## Decision flow
 
 ### 1. Decide the iOS product experience
 
-- Does iOS need SwiftUI for specific screens, or is CMP sufficient?
+- Does the product need an Xcode widget or extension that must stay native?
 - Are there iOS-specific interaction, accessibility, or animation requirements?
-- Can the team maintain Swift code and Xcode builds?
+- Can those requirements be implemented in Kotlin/CMP while keeping the Swift Xcode shell thin?
 
 ### 2. Choose the sharing boundary
 
-- Start with kmp-core-native-ui when sharing domain/data behavior while keeping native UI is the goal.
+- Start with kmp-core-native-ui when sharing domain/data behavior while keeping platform-specific UI implementations in Kotlin is the goal.
 - Consider cmp-client when a single UI implementation across Android and iOS helps the team deliver faster.
-- A mixed strategy is valid: share selected CMP screens and keep some platform features native.
+- A mixed strategy is valid: share selected CMP screens and keep Kotlin platform-specific UI where behavior differs.
 
 ### 3. Choose who operates the backend
 
@@ -36,6 +36,7 @@ The last profile adds a server only when the product chooses to operate its own 
 - The UI, state, domain rules, and data access that will be shared.
 - Platform-specific functionality and why it remains native.
 - The iOS SDK integration approach and its maturity.
+- The approved direct libraries for each application module, following the [dependency policy](dependency-policy.md).
 - Server ownership, API contract source, and operational responsibility.
 - Observable signals that could justify revisiting the choice, such as UI delivery bottlenecks, platform-specific code volume, or build time.
 

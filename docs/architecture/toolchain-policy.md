@@ -21,6 +21,10 @@ The Kotlin compatibility guide lists Kotlin 2.4.20–2.4.21 with Gradle 7.6.3–
 
 The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1, with Android compile SDK 36, min SDK 24, and JVM target 17. This tuple is within the reviewed Kotlin compatibility range, and API 36 is supported by this AGP line. Keep it **candidate** until repository CI builds the Android and Apple targets and the modules contain real consumer-facing APIs. The local POM and Gradle configuration checks are not a full platform compatibility claim.
 
+## SwiftPM import compatibility gate
+
+Kotlin's SwiftPM import guide currently labels the feature Alpha and specifies KGP 2.5.0-RC for trying it. The bridge-library baseline above pins KGP 2.4.21 and has no SwiftPM SDK integration fixture, so it does not establish compatibility for Weft bridges. Do not add a SwiftPM-backed bridge or claim it is release-ready until a dedicated pilot selects an officially documented KGP version and validates a published Maven consumer's iOS link and archive path.
+
 ## Version update procedure
 
 1. Check the Kotlin KMP compatibility guide for KGP, Gradle, AGP, and Xcode ranges.
@@ -36,4 +40,5 @@ The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1
 - [AGP 9 migration for multiplatform projects](https://kotlinlang.org/docs/multiplatform/multiplatform-project-agp-9-migration.html)
 - [Android KMP library plugin](https://developer.android.com/kotlin/multiplatform/plugin)
 - [Compose Multiplatform compatibility and releases](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
+- [SwiftPM dependencies in KMP modules](https://kotlinlang.org/docs/multiplatform/multiplatform-spm-import.html)
 - [Android API and AGP compatibility](https://developer.android.com/studio/releases)

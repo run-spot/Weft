@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   publish:
-    if: startsWith(github.ref, 'refs/tags/map-v') || startsWith(github.ref, 'refs/tags/push-v') || startsWith(github.ref, 'refs/tags/login-v')
+    if: startsWith(github.ref, 'refs/tags/weft-v')
     runs-on: ubuntu-latest
     env:
       ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
@@ -38,10 +38,8 @@ jobs:
             exit 1
           fi
           case "$GITHUB_REF_NAME" in
-            map-v*) MODULE=map; VERSION="${GITHUB_REF_NAME#map-v}" ;;
-            push-v*) MODULE=push; VERSION="${GITHUB_REF_NAME#push-v}" ;;
-            login-v*) MODULE=login; VERSION="${GITHUB_REF_NAME#login-v}" ;;
+            weft-v*) VERSION="${GITHUB_REF_NAME#weft-v}" ;;
             *) echo "Unsupported release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
           esac
           test -n "$VERSION"
-          ./gradlew "-PVERSION_NAME=$VERSION" "-PPOM_DEVELOPER_EMAIL=$WEFT_DEVELOPER_EMAIL" ":$MODULE:publishToMavenCentral"
+          ./gradlew "-PVERSION_NAME=$VERSION" "-PPOM_DEVELOPER_EMAIL=$WEFT_DEVELOPER_EMAIL" publishWeftReleaseToMavenCentral

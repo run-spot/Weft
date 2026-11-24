@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "mode": "strict-direct-dependency-allowlist",
+  "allowedCoordinates": [
+    { "group": "run.thespot.weft", "artifactPrefix": "weft-" },
+    { "group": "run.thespot.montage", "artifacts": ["montage-kmp"] },
+    { "group": "io.ktor", "artifactPrefix": "ktor-client-" },
+    { "group": "io.ktor", "artifacts": ["ktor-serialization-kotlinx-json"] },
+    { "group": "de.jensklingenberg.ktorfit", "artifactPrefix": "ktorfit-" },
+    {
+      "group": "org.jetbrains.kotlin",
+      "artifacts": [
+        "kotlin-stdlib",
+        "kotlin-test",
+        "kotlin-test-common",
+        "kotlin-test-junit",
+        "kotlin-test-junit5",
+        "kotlin-test-annotations-common"
+      ]
+    },
+    {
+      "group": "org.jetbrains.kotlinx",
+      "artifacts": [
+        "kotlinx-coroutines-core",
+        "kotlinx-coroutines-test",
+        "kotlinx-serialization-core",
+        "kotlinx-serialization-json"
+      ]
+    },
+    { "groupPrefix": "org.jetbrains.compose." },
+    { "groupPrefix": "org.jetbrains.androidx.lifecycle." },
+    { "groupPrefix": "androidx.compose." },
+    { "group": "androidx.activity", "artifactPrefix": "activity-" },
+    { "group": "androidx.lifecycle", "artifactPrefix": "lifecycle-" },
+    { "group": "androidx.savedstate", "artifactPrefix": "savedstate-" },
+    { "group": "androidx.core", "artifactPrefix": "core-" }
+  ],
+  "serverModuleKinds": ["server-feature", "spring-boot-application"]
+}

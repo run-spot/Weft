@@ -19,6 +19,7 @@ REQUIRED_DOCS = [
     "docs/architecture/project-shapes.md",
     "docs/architecture/module-layout.md",
     "docs/architecture/apple-interop.md",
+    "docs/architecture/dependency-policy.md",
     "docs/architecture/bridge-library.md",
     "docs/architecture/backend.md",
     "docs/architecture/toolchain-policy.md",
@@ -33,7 +34,43 @@ REQUIRED_SKILLS = [
 PROJECT_NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,62}$")
 MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 HANGUL_RE = re.compile(r"[\uac00-\ud7a3]")
+DEPENDENCY_POLICY_PATH = ROOT / "harness" / "dependency-policy.json"
+GROOVY_DEPENDENCY_RE = re.compile(
+    r"\b(?:api|implementation|compileOnly|runtimeOnly|[A-Za-z0-9_]*(?:Api|Implementation|CompileOnly|RuntimeOnly))\s+(['\"])([^'\"]+)\1"
+)
+ADD_DEPENDENCY_RE = re.compile(r"\b(dependencies\s*\.\s*)?add(?:Provider|AllLater|All)?\s*\(")
+COORDINATE_RE = re.compile(r"(?P<group>[A-Za-z0-9_.-]+):(?P<artifact>[A-Za-z0-9_.-]+)")
 REPOSITORY_TEXT_SUFFIXES = {".md", ".json", ".yml", ".yaml", ".py", ".sh"}
+REQUIRED_SKILL_RULES = {
+    "weft-architect": (
+        "dependency-policy.md",
+        "hard allowlist",
+        "UIApplicationDelegate",
+        "app UI, state, and business behavior in Kotlin",
+        "policy blocker",
+        "Kotlin/Swift ownership boundaries",
+    ),
+    "weft-scaffold": (
+        "dependency-policy.md",
+        "strict direct-dependency allowlist",
+        "ios_implementation: kotlin-first",
+    ),
+    "weft-apple-bridge": (
+        "dependency-policy.md",
+        "UIApplicationDelegate",
+        "Objective-C-visible",
+        "run.thespot.weft:weft-*",
+        "widgets/extensions",
+    ),
+    "weft-review": (
+        "dependency-policy.md",
+        "unapproved or unparsed dependency",
+        "blocking policy violation",
+        "Kotlin owns iOS app startup",
+        "Objective-C-visible SDK façade",
+        "Inventory every Swift source file",
+    ),
+}
 
 
 class WeftError(Exception):
@@ -92,6 +129,8 @@ def show_plan(profile: dict[str, Any]) -> None:
     print()
     print(f"- UI sharing: {profile['uiSharing']}")
     print(f"- Backend: {profile['backend']}")
+    print("- Dependency policy: strict Weft/Montage/networking allowlist")
+    print("- iOS implementation: Kotlin-first; Swift is limited to Xcode bootstrap, widgets/extensions, and SDK façades")
     print("- Toolchain: choose an officially compatible tuple; no versions are pinned by this plan.")
     print()
     print("## Modules")
@@ -144,12 +183,16 @@ def scaffold(profile: dict[str, Any], name: str, output: Path) -> None:
         "generator_version: 0.1.0",
         "ui_sharing: " + profile["uiSharing"],
         "backend: " + profile["backend"],
+        "dependency_policy: strict-direct-dependency-allowlist",
+        "ios_implementation: kotlin-first",
         "toolchain_status: undecided",
         "",
         "## Decisions to finish",
         "",
         "- Select an exact Kotlin/Gradle/AGP/Compose/Xcode tuple using the Weft toolchain policy.",
         "- Add build scripts and CI, then verify Android and iOS targets before calling this project build-ready.",
+        "- Keep app startup, UIApplicationDelegate-level behavior, app UI, and business logic in Kotlin; limit Swift app code to an Xcode bootstrap/forwarder.",
+        "- Record any Swift widget/extension or Objective-C-visible SwiftPM SDK façade as a narrow platform exception.",
         "- Record platform-specific requirements and any deviations from this profile.",
         "",
         "## Modules",
@@ -187,6 +230,9 @@ def verify_skills() -> list[str]:
             errors.append(f"skill description is missing or too short: {skill_file.relative_to(ROOT)}")
         if "[TODO" in text:
             errors.append(f"unfinished skill placeholder: {skill_file.relative_to(ROOT)}")
+        for rule in REQUIRED_SKILL_RULES.get(skill_name, ()):
+            if rule.casefold() not in text.casefold():
+                errors.append(f"skill is missing required Weft policy rule '{rule}': {skill_file.relative_to(ROOT)}")
     return errors
 
 
@@ -195,6 +241,8 @@ def verify_toolkit(profiles: dict[str, dict[str, Any]]) -> list[str]:
     for path in REQUIRED_DOCS:
         if not (ROOT / path).is_file():
             errors.append(f"missing required document: {path}")
+    if not DEPENDENCY_POLICY_PATH.is_file():
+        errors.append("missing dependency allowlist: harness/dependency-policy.json")
     errors.extend(verify_skills())
     errors.extend(verify_relative_markdown_links())
     errors.extend(verify_repository_language())
@@ -259,11 +307,290 @@ def verify_project(project_path: Path, profiles: dict[str, dict[str, Any]]) -> l
                 errors.append(f"missing planned source set: {module['path']}/src/{source_set}")
     if not re.search(r"^toolchain_status:\s*\S+", manifest, re.MULTILINE):
         errors.append("WEFT.md must record a toolchain status")
+    if not re.search(r"^dependency_policy:\s*strict-direct-dependency-allowlist\s*$", manifest, re.MULTILINE):
+        errors.append("WEFT.md must adopt the strict direct-dependency allowlist")
+    if not re.search(r"^ios_implementation:\s*kotlin-first\s*$", manifest, re.MULTILINE):
+        errors.append("WEFT.md must adopt Kotlin-first iOS app implementation")
     project_readme = project / "README.md"
     if not project_readme.is_file():
         errors.append("missing project README.md")
     elif "structural scaffold" not in project_readme.read_text(encoding="utf-8"):
         errors.append("project README must state whether this scaffold is build-ready")
+    errors.extend(verify_project_dependencies(project, profile))
+    return errors
+
+
+def normalize_catalog_alias(alias: str) -> str:
+    return re.sub(r"[-_.]+", ".", alias).strip(".")
+
+
+def load_catalog_coordinates(project: Path) -> dict[str, tuple[str, str]]:
+    aliases: dict[str, tuple[str, str]] = {}
+    catalog_path = project / "gradle" / "libs.versions.toml"
+    if not catalog_path.is_file():
+        return aliases
+
+    in_libraries = False
+    for line in catalog_path.read_text(encoding="utf-8").splitlines():
+        section = re.match(r"^\s*\[([^]]+)\]\s*$", line)
+        if section:
+            in_libraries = section.group(1) == "libraries"
+            continue
+        if not in_libraries:
+            continue
+
+        entry = re.match(r"^\s*([A-Za-z0-9_.-]+)\s*=\s*(.+?)\s*$", line)
+        if not entry:
+            continue
+        alias, value = entry.groups()
+        module = re.search(r"\bmodule\s*=\s*['\"]([^'\"]+)['\"]", value)
+        if module:
+            coordinate = COORDINATE_RE.search(module.group(1))
+        else:
+            group = re.search(r"\bgroup\s*=\s*['\"]([^'\"]+)['\"]", value)
+            artifact = re.search(r"\bname\s*=\s*['\"]([^'\"]+)['\"]", value)
+            coordinate = None
+            if group and artifact:
+                aliases[normalize_catalog_alias(alias)] = (group.group(1), artifact.group(1))
+                continue
+            coordinate = COORDINATE_RE.search(value.strip("'\""))
+        if coordinate:
+            aliases[normalize_catalog_alias(alias)] = (
+                coordinate.group("group"),
+                coordinate.group("artifact"),
+            )
+    return aliases
+
+
+def coordinate_is_approved(group: str, artifact: str, policy: dict[str, Any]) -> bool:
+    for rule in policy.get("allowedCoordinates", []):
+        if "groupPrefix" in rule:
+            group_matches = group.startswith(rule["groupPrefix"])
+        else:
+            group_matches = group == rule.get("group")
+        if not group_matches:
+            continue
+        allowed_artifacts = rule.get("artifacts", [])
+        artifact_prefix = rule.get("artifactPrefix")
+        if artifact in allowed_artifacts or (artifact_prefix and artifact.startswith(artifact_prefix)):
+            return True
+    return False
+
+
+def read_call_argument(source: str, open_parenthesis: int) -> str | None:
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    start = open_parenthesis + 1
+    for index in range(open_parenthesis, len(source)):
+        character = source[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in ("'", '"'):
+            quote = character
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            depth -= 1
+            if depth == 0:
+                return source[start:index]
+    return None
+
+
+def split_top_level_arguments(arguments: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
+    depth = 0
+    quote: str | None = None
+    escaped = False
+    for index, character in enumerate(arguments):
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            continue
+        if character in ("'", '"'):
+            quote = character
+        elif character in "([{":
+            depth += 1
+        elif character in ")]}":
+            depth -= 1
+        elif character == "," and depth == 0:
+            parts.append(arguments[start:index].strip())
+            start = index + 1
+    trailing = arguments[start:].strip()
+    if trailing:
+        parts.append(trailing)
+    return parts
+
+
+def is_dependency_configuration(configuration: str) -> bool:
+    return configuration in {"api", "implementation", "compileOnly", "runtimeOnly", "ksp"} or bool(
+        re.fullmatch(r"[A-Za-z0-9_]*(?:Api|Implementation|CompileOnly|RuntimeOnly)", configuration)
+    )
+
+
+def is_local_project_dependency(argument: str) -> bool:
+    source = argument.strip()
+    call = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*\(", source)
+    if not call:
+        return False
+    opening_parenthesis = call.end() - 1
+    contents = read_call_argument(source, opening_parenthesis)
+    if contents is None:
+        return False
+    closing_parenthesis = opening_parenthesis + len(contents) + 1
+    if source[closing_parenthesis] != ")" or source[closing_parenthesis + 1 :].strip():
+        return False
+    if call.group(1) == "project":
+        return True
+    if call.group(1) in {"platform", "enforcedPlatform", "testFixtures"}:
+        return is_local_project_dependency(contents)
+    return False
+
+
+def verify_dependency_argument(
+    argument: str,
+    relative: Path,
+    aliases: dict[str, tuple[str, str]],
+    policy: dict[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if is_local_project_dependency(argument):
+        return errors
+    if re.fullmatch(r"\s*kotlin\s*\(\s*['\"]test(?:-[A-Za-z0-9_-]+)?['\"]\s*\)\s*", argument):
+        return errors
+
+    coordinates = list(COORDINATE_RE.finditer(argument))
+    if coordinates:
+        for coordinate in coordinates:
+            group, artifact = coordinate.group("group", "artifact")
+            if not coordinate_is_approved(group, artifact, policy):
+                errors.append(
+                    f"unapproved dependency in {relative}: {group}:{artifact}; "
+                    "use an allowlisted artifact or update the Weft policy"
+                )
+        return errors
+
+    alias_match = re.search(r"\blibs\.([A-Za-z0-9_.-]+)", argument)
+    if alias_match:
+        alias = normalize_catalog_alias(alias_match.group(1))
+        coordinate = aliases.get(alias)
+        if coordinate is None:
+            errors.append(f"unresolved version catalog alias in {relative}: libs.{alias_match.group(1)}")
+            return errors
+        group, artifact = coordinate
+        if not coordinate_is_approved(group, artifact, policy):
+            errors.append(
+                f"unapproved dependency in {relative}: {group}:{artifact} via libs.{alias_match.group(1)}; "
+                "use an allowlisted artifact or update the Weft policy"
+            )
+        return errors
+
+    errors.append(
+        f"unsupported dependency notation in {relative}: {argument.strip()}; "
+        "use a Maven coordinate, a local project dependency, kotlin(test), or a default version catalog alias"
+    )
+    return errors
+
+
+def verify_project_dependencies(project: Path, profile: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    gradle_files = [*project.rglob("*.gradle.kts"), *project.rglob("*.gradle")]
+    if not gradle_files:
+        return errors
+    try:
+        policy = json.loads(DEPENDENCY_POLICY_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        return [f"cannot load dependency allowlist: {error}"]
+    if policy.get("schemaVersion") != 1 or policy.get("mode") != "strict-direct-dependency-allowlist":
+        return ["dependency allowlist has an unsupported schema or mode"]
+
+    aliases = load_catalog_coordinates(project)
+    server_kinds = set(policy.get("serverModuleKinds", []))
+    server_roots = [
+        Path(module["path"]).parts
+        for module in profile["modules"]
+        if module.get("kind") in server_kinds
+    ]
+    configurations = re.compile(
+        r"\b(?:api|implementation|compileOnly|runtimeOnly|ksp|[A-Za-z0-9_]*(?:Api|Implementation|CompileOnly|RuntimeOnly))\s*\("
+    )
+
+    for build_file in gradle_files:
+        relative = build_file.relative_to(project)
+        if any(relative.parts[: len(server_root)] == server_root for server_root in server_roots):
+            continue
+        source = build_file.read_text(encoding="utf-8")
+        is_build_logic = any(part in {"build-logic", "buildSrc"} for part in relative.parts)
+
+        if is_build_logic:
+            # Build-logic's own implementation dependencies are not app libraries. Still inspect
+            # explicit additions to app configurations so convention plugins cannot hide them.
+            for match in ADD_DEPENDENCY_RE.finditer(source):
+                arguments = read_call_argument(source, match.end() - 1)
+                if arguments is None:
+                    errors.append(f"cannot parse build-logic dependency addition in {relative}")
+                    continue
+                parts = split_top_level_arguments(arguments)
+                if len(parts) < 2:
+                    continue
+                configuration = re.fullmatch(r"['\"]([^'\"]+)['\"]", parts[0])
+                if configuration and is_dependency_configuration(configuration.group(1)):
+                    errors.extend(verify_dependency_argument(parts[1], relative, aliases, policy))
+                elif match.group(1) or COORDINATE_RE.search(parts[1]) or "libs." in parts[1]:
+                    errors.append(f"unsupported build-logic dependency configuration in {relative}: {parts[0]}")
+            continue
+
+        for match in configurations.finditer(source):
+            argument = read_call_argument(source, match.end() - 1)
+            if argument is None:
+                errors.append(f"cannot parse dependency declaration in {relative}")
+                continue
+            errors.extend(verify_dependency_argument(argument, relative, aliases, policy))
+
+        for match in GROOVY_DEPENDENCY_RE.finditer(source):
+            coordinate = COORDINATE_RE.search(match.group(2))
+            if not coordinate:
+                errors.append(f"unsupported dependency notation in {relative}: {match.group(2)}")
+                continue
+            group, artifact = coordinate.group("group", "artifact")
+            if not coordinate_is_approved(group, artifact, policy):
+                errors.append(
+                    f"unapproved dependency in {relative}: {group}:{artifact}; "
+                    "use an allowlisted artifact or update the Weft policy"
+                )
+
+        for match in ADD_DEPENDENCY_RE.finditer(source):
+            arguments = read_call_argument(source, match.end() - 1)
+            if arguments is None:
+                errors.append(f"cannot parse dependency addition in {relative}")
+                continue
+            parts = split_top_level_arguments(arguments)
+            if len(parts) < 2:
+                if match.group(1):
+                    errors.append(f"cannot parse dependencies.add(...) declaration in {relative}")
+                continue
+            configuration = re.fullmatch(r"['\"]([^'\"]+)['\"]", parts[0])
+            if configuration:
+                if not is_dependency_configuration(configuration.group(1)):
+                    continue
+            elif match.group(1) or COORDINATE_RE.search(parts[1]) or "libs." in parts[1]:
+                errors.append(f"unsupported dependency configuration in {relative}: {parts[0]}")
+                continue
+            else:
+                continue
+            errors.extend(verify_dependency_argument(parts[1], relative, aliases, policy))
+
     return errors
 
 
