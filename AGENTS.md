@@ -25,6 +25,8 @@ Write tracked repository content in English, including documentation, skills, CL
 - Keep Android and iOS entry points distinct from shared implementation where the selected profile requires it.
 - Keep Android framework types out of commonMain contracts. Android API familiarity may guide semantics, but must not leak Context, Activity, or AndroidX types into common APIs.
 - Install every Weft capability plugin through `:weft-core` so an app configures its capabilities in one `Weft { install(...) }` block. Plugins of one capability family declare the same plugin type (`KClass`), and a second installation for the same type must fail fast rather than replace the first.
+- Hand the runtime to Compose through `WeftApp(weft) { ... }` and read it with `LocalWeft.current`; do not pass a `Weft` parameter through every composable. A composable that reads `LocalWeft` outside `WeftApp` fails during composition, which is the intended signal.
+- Verify plugin wiring with `:weft-gradle-plugin`: `verifyWeftPlugins` runs inside `check` and must stay offline; `verifyWeftHealth` performs credentialed network probes and must not be wired into `check`.
 - Treat SwiftPM import, Kotlin framework export, and Swift implementation of Kotlin contracts as separate interop directions.
 - Treat `backend: spring-boot` and `backend: supabase` as the only supported app profile values. Ask whether the team will operate a separate server: choose Spring Boot for that path and Supabase when it will not.
 - A scaffold is not build-ready unless its Gradle/Xcode files and CI prove that claim. The current CLI only generates a structural scaffold.
@@ -38,9 +40,10 @@ The official Kotlin/Gradle/AGP compatibility table is authoritative for supporte
 ~~~bash
 ./scripts/verify.sh
 ./gradlew verify
+./gradlew :weft-gradle-plugin:test
 ~~~
 
-The script checks profile manifests, required docs, skill frontmatter, Markdown links, and generated project layouts. The Gradle task checks library modules and Maven publication metadata. Neither task publishes artifacts. Build and publish Apple XCFrameworks only from a macOS release job.
+The script checks profile manifests, required docs, skill frontmatter, Markdown links, and generated project layouts. The Gradle task checks library modules and Maven publication metadata. Neither task publishes artifacts. `verifyWeftHealth` is the only task that reaches a provider, and it runs on request only. Build and publish Apple XCFrameworks only from a macOS release job.
 
 ## Gradle libraries and release safety
 
@@ -51,8 +54,9 @@ The script checks profile manifests, required docs, skill frontmatter, Markdown 
 
 ## Gradle library map
 
-- `build-logic`: shared KMP target, toolchain, POM, and signing conventions.
-- `:weft-core`: plugin installation contract (`Weft`, `WeftConfig`, `WeftPlugin`, `Weft.get`) shared by every capability library; no vendor or platform types.
+- `build-logic`: shared KMP target, toolchain, POM, signing, Compose compiler, and JVM plugin conventions.
+- `:weft-core`: plugin installation contract (`Weft`, `WeftConfig`, `WeftPlugin`, `Weft.get`), the Compose entry point (`LocalWeft`, `WeftApp`), and the health-check contract (`WeftHealthCheck`, `Weft.healthChecks`); no vendor or platform types.
 - `:weft-map`, `:weft-login`, and `:weft-push`: capability libraries with independent API milestone checklists.
+- `:weft-gradle-plugin`: `verifyWeftPlugins` (offline plugin and credential literal check, part of `check`) and `verifyWeftHealth` (aggregated credentialed probes, run on request).
 - `:weft-bom`: metadata-only Java Platform that publishes version constraints for the four libraries.
 - The KMP modules share build conventions. Keep the BOM as version metadata; do not add library-to-library dependencies without a real public API need.

@@ -17,12 +17,19 @@ kotlin {
             jvmTarget.set(JvmTarget.JVM_17)
         }
 
-        withHostTest {}
+        withHostTest {
+            // Host tests run on the JVM without Android framework stubs. Returning defaults keeps
+            // framework calls (for example the Compose runtime reporting a composition failure
+            // through android.util.Log) from masking the original assertion failure.
+            isReturnDefaultValues = true
+        }
     }
 
+    // Apple targets Compose Multiplatform publishes. Compose dropped the Intel simulator
+    // (iosX64) publication, so weft-core could not resolve its Compose runtime dependency for
+    // that target; the shared convention keeps only the device and Apple Silicon simulator.
     iosArm64()
     iosSimulatorArm64()
-    iosX64()
 
     sourceSets {
         commonTest.dependencies {

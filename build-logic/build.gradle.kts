@@ -12,4 +12,5 @@ dependencies {
     implementation(libs.kotlin.gradle.plugin)
     implementation(libs.android.gradle.plugin)
     implementation(libs.vanniktech.gradle.publish.plugin)
+    implementation(libs.kotlin.compose.compiler.plugin)
 }

@@ -14,7 +14,6 @@ tasks.register("verify") {
         "checkPomFileForAndroidPublication",
         "checkPomFileForIosArm64Publication",
         "checkPomFileForIosSimulatorArm64Publication",
-        "checkPomFileForIosX64Publication",
     )
     listOf(":weft-core", ":weft-map", ":weft-login", ":weft-push").forEach { libraryPath ->
         kmpPublicationChecks.forEach { taskName ->

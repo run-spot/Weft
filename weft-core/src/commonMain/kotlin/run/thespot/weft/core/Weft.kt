@@ -54,13 +54,14 @@ public class WeftConfig internal constructor() {
             pluginName = plugin.pluginName,
             instance = instance,
             install = { weft -> plugin.install(instance, weft) },
+            healthChecks = plugin.healthCheck(instance),
         )
     }
 
     internal fun createWeft(): Weft {
         val weft = Weft(
             installedPlugins = pendingInstalls.associate { pending ->
-                pending.type to InstalledPlugin(pending.instance)
+                pending.type to InstalledPlugin(pending.instance, pending.healthChecks)
             },
         )
         pendingInstalls.forEach { it.install(weft) }
@@ -113,10 +114,22 @@ public class Weft internal constructor(
     @Suppress("UNCHECKED_CAST")
     public fun <TPlugin : Any> getOrNull(type: KClass<TPlugin>): TPlugin? =
         installedPlugins[type]?.instance as TPlugin?
+
+    /**
+     * Health checks reported by every installed plugin, in installation order.
+     *
+     * Each entry comes from [WeftPlugin.healthCheck] and describes one request that proves a
+     * configured credential works. The runtime only collects them: running a probe, its timeout,
+     * and the decision whether a failure blocks a build belong to the caller, so a pure Kotlin
+     * module stays free of networking. A plugin that reports nothing contributes no entry.
+     */
+    public fun healthChecks(): List<WeftHealthCheck> =
+        installedPlugins.values.flatMap { plugin -> plugin.healthChecks }
 }
 
 internal class InstalledPlugin(
     val instance: Any,
+    val healthChecks: List<WeftHealthCheck>,
 )
 
 private class PendingInstall(
@@ -124,4 +137,5 @@ private class PendingInstall(
     val pluginName: String,
     val instance: Any,
     val install: (Weft) -> Unit,
+    val healthChecks: List<WeftHealthCheck>,
 )

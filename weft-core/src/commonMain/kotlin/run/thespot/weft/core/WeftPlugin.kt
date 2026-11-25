@@ -38,6 +38,20 @@ public interface WeftPlugin<TConfig : Any, TPlugin : Any> {
     public val pluginName: String
 
     /**
+     * Probes that verify the credential this plugin was configured with, reported to build and
+     * admin tools through [Weft.healthChecks].
+     *
+     * A capability library owns the endpoint its provider answers, so the check lives here rather
+     * than in a generic verifier that would have to know every vendor URL. Return an empty list when
+     * the plugin needs no remote credential, which is the default.
+     *
+     * The hook runs while [plugin] is registered, after [prepare] produced it, so it may read the
+     * same configuration the plugin received. It must not perform network I/O: it describes the
+     * probe, and the caller runs it.
+     */
+    public fun healthCheck(plugin: TPlugin): List<WeftHealthCheck> = emptyList()
+
+    /**
      * Creates and configures the plugin instance from [block].
      *
      * The implementation creates its default configuration, applies [block], validates the result,

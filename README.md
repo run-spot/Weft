@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:weft-core` module provides the Ktor-style plugin installation contract that capability libraries and apps share. The `:weft-map`, `:weft-login`, and `:weft-push` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:weft-core` module provides the Ktor-style plugin installation contract that capability libraries and apps share, plus the Compose entry point (`LocalWeft`, `WeftApp`) and the health-check contract that capability libraries use to describe their credential probes. `:weft-gradle-plugin` checks app wiring offline and runs those probes on request. The `:weft-map`, `:weft-login`, and `:weft-push` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
 
 ## Start here
 
@@ -67,6 +67,47 @@ val map = weft.get<MapPlugin>()
 ~~~
 
 Every map provider declares `type = MapPlugin::class`, so `weft.get<MapPlugin>()` returns whichever implementation was installed. Installing a second plugin for the same plugin type fails with `DuplicateWeftPluginException` instead of silently replacing the first.
+
+Composables read the runtime from the composition instead of receiving it as a parameter. `WeftApp` provides it once at the root, so screens depend only on the capability they use:
+
+~~~kotlin
+setContent {
+    WeftApp(weft) {
+        val map = LocalWeft.current.get<MapPlugin>()
+        MapScreen(map)
+    }
+}
+~~~
+
+Reading `LocalWeft` outside `WeftApp` fails during composition with a message that names the wrapper, and a preview or UI test provides a fake runtime the same way.
+
+## Verify plugin wiring
+
+`:weft-gradle-plugin` keeps an app honest about what it installed. Add it to the app module:
+
+~~~kotlin
+plugins {
+    id("weft.verify")
+}
+~~~
+
+`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), or when an `install(...)` block configures a credential as an empty or placeholder string. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
+
+Capability libraries own their probes, because each provider knows its own endpoint. A plugin reports them through `WeftPlugin.healthCheck`, and a build can add one more:
+
+~~~kotlin
+weft {
+    healthCheck("supabase-auth") {
+        url = "https://project.supabase.co/auth/v1/health"
+        header("apikey", providers.environmentVariable("SUPABASE_ANON_KEY").get())
+    }
+}
+~~~
+
+~~~bash
+./gradlew verifyWeftPlugins   # offline, also runs with `check`
+./gradlew verifyWeftHealth    # network; run before a release or when credentials change
+~~~
 
 Consumers can import the BOM to use the coordinated version without repeating it:
 

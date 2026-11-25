@@ -122,6 +122,34 @@ class WeftCoreTest {
         assertEquals("hi", greeting.text)
         assertEquals("naver", greeting.mapProviderName)
     }
+
+    @Test
+    fun collectsHealthChecksFromPluginsThatReportThem() {
+        val weft = Weft {
+            install(NaverMap) {
+                applicationKey = "naver-app-key"
+            }
+            install(GreetingPlugin) {
+                greeting = "hi"
+            }
+        }
+
+        val checks = weft.healthChecks()
+        assertEquals(1, checks.size)
+        assertEquals("greeting", checks.single().name)
+        assertEquals("https://example.invalid/greeting/health", checks.single().url)
+        assertEquals("GET", checks.single().method)
+        assertEquals("hi", checks.single().headers["X-Greeting"])
+    }
+
+    @Test
+    fun runtimeWithoutHealthChecksReportsAnEmptyList() {
+        val weft = Weft {
+            install(NaverMap)
+        }
+
+        assertTrue(weft.healthChecks().isEmpty())
+    }
 }
 
 // MARK: - Fake capability plugins
@@ -186,4 +214,12 @@ private object GreetingPlugin : WeftPlugin<GreetingConfig, Greeting> {
     override fun install(plugin: Greeting, scope: Weft) {
         plugin.mapProviderName = scope.getOrNull<MapPlugin>()?.providerName
     }
+
+    override fun healthCheck(plugin: Greeting): List<WeftHealthCheck> = listOf(
+        WeftHealthCheck(
+            name = "greeting",
+            url = "https://example.invalid/greeting/health",
+            headers = mapOf("X-Greeting" to plugin.text),
+        ),
+    )
 }

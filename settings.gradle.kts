@@ -19,4 +19,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Weft"
 
-include(":weft-core", ":weft-map", ":weft-login", ":weft-push", ":weft-bom")
+include(":weft-core", ":weft-map", ":weft-login", ":weft-push", ":weft-bom", ":weft-gradle-plugin")
