@@ -9,6 +9,23 @@ mavenPublishing {
 }
 
 kotlin {
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "WeftKakaoMap"
+            isStatic = true
+        }
+    }
+
+    swiftPMDependencies {
+        discoverClangModulesImplicitly = true
+        swiftPackage(
+            url = url("https://github.com/kakao-mapsSDK/KakaoMapsSDK-SPM.git"),
+            version = exact("2.12.19"),
+            products = listOf(product("KakaoMapsSDK-SPM", platforms = setOf(iOS()))),
+        )
+        iosMinimumDeploymentTarget.set("13.0")
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(project(":weft-core"))
