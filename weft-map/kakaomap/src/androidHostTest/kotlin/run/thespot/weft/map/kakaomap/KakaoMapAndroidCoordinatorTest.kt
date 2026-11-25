@@ -1,0 +1,485 @@
+package run.thespot.weft.map.kakaomap
+
+import androidx.compose.runtime.AbstractApplier
+import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Composition
+import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.neverEqualPolicy
+import androidx.compose.runtime.snapshots.Snapshot
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import run.thespot.weft.core.map.CameraPosition
+import run.thespot.weft.core.map.LatLng
+import run.thespot.weft.core.map.Marker
+import run.thespot.weft.core.map.MapContent
+import run.thespot.weft.core.map.MapMarker
+import run.thespot.weft.core.map.MapScope
+import run.thespot.weft.core.map.WeftMapState
+import run.thespot.weft.core.map.rememberMapContent
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class KakaoMapAndroidCoordinatorTest {
+    private lateinit var mapContentFactory: MapContentFactory
+
+    @BeforeTest
+    fun resetSdkKeyRegistry() {
+        KakaoMapAndroidSdkInitializer.resetForTest()
+        mapContentFactory = MapContentFactory()
+    }
+
+    @AfterTest
+    fun clearSdkKeyRegistry() {
+        mapContentFactory.close()
+        KakaoMapAndroidSdkInitializer.resetForTest()
+    }
+
+    @Test
+    fun startsOnlyWhenAttachedAndResumedAndFinishesOnce() {
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(host)
+
+        assertEquals(KakaoMapAndroidCoordinatorState.Created, coordinator.state)
+        coordinator.onAttach()
+        assertEquals(KakaoMapAndroidCoordinatorState.Attached, coordinator.state)
+        assertTrue(host.lifecycleCalls.isEmpty())
+
+        coordinator.onResume()
+        assertEquals(KakaoMapAndroidCoordinatorState.Started, coordinator.state)
+        assertEquals(listOf("start"), host.lifecycleCalls)
+        host.ready(KakaoMapZoomBounds(min = 3, max = 20))
+        assertEquals(KakaoMapAndroidCoordinatorState.Ready, coordinator.state)
+        coordinator.onPause()
+        assertEquals(KakaoMapAndroidCoordinatorState.Paused, coordinator.state)
+        coordinator.onPause()
+        coordinator.onDetach()
+        coordinator.onAttach()
+        coordinator.onResume()
+        coordinator.onFinish()
+        assertEquals(KakaoMapAndroidCoordinatorState.Finished, coordinator.state)
+        coordinator.onFinish()
+        coordinator.onResume()
+        coordinator.onAttach()
+
+        assertEquals(listOf("start", "pause", "resume", "finish"), host.lifecycleCalls)
+    }
+
+    @Test
+    fun pauseBeforeStartDoesNotPauseHostAndResumeStartsExactlyOnce() {
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(host)
+
+        coordinator.onAttach()
+        coordinator.onPause()
+        coordinator.onDetach()
+        assertTrue(host.lifecycleCalls.isEmpty())
+
+        coordinator.onAttach()
+        coordinator.onResume()
+        coordinator.onResume()
+
+        assertEquals(listOf("start"), host.lifecycleCalls)
+    }
+
+    @Test
+    fun sameSdkKeyInitializesOnceAndDifferentKeyReportsOneError() {
+        val firstHost = FakeKakaoMapAndroidHost()
+        val secondHost = FakeKakaoMapAndroidHost()
+        val thirdHost = FakeKakaoMapAndroidHost()
+        var firstInitializations = 0
+        var secondInitializations = 0
+        var thirdInitializations = 0
+        firstHost.initializeSdk = { firstInitializations++ }
+        secondHost.initializeSdk = { secondInitializations++ }
+        thirdHost.initializeSdk = { thirdInitializations++ }
+        val errors = mutableListOf<Throwable>()
+        val first = coordinator(firstHost, appKey = "same-key")
+        val second = coordinator(secondHost, appKey = "same-key")
+        val third = coordinator(thirdHost, appKey = "different-key", onError = { errors += it })
+
+        first.onAttach()
+        first.onResume()
+        second.onAttach()
+        second.onResume()
+        third.onAttach()
+        third.onResume()
+        thirdHost.fail(IllegalStateException("second SDK key"))
+        thirdHost.fail(IllegalStateException("duplicate failure"))
+
+        assertEquals(1, firstInitializations)
+        assertEquals(0, secondInitializations)
+        assertEquals(0, thirdInitializations)
+        assertEquals(1, errors.size)
+        assertIs<KakaoMapException>(errors.single())
+        assertEquals("same-key", firstHost.startedAppKeys.single())
+        assertEquals("same-key", secondHost.startedAppKeys.single())
+        assertEquals("different-key", thirdHost.startedAppKeys.single())
+    }
+
+    @Test
+    fun latestPreReadyCameraAndContentAreRenderedOnceUsingNativeZoomBounds() {
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(
+            host = host,
+            initialState = state(zoom = 9f, bearing = 0f),
+            initialContent = content(marker("initial")),
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+
+        coordinator.update(
+            state = state(zoom = 30.5f, bearing = 450f),
+            content = content(marker("latest")),
+            onError = null,
+        )
+        assertTrue(host.renders.isEmpty())
+
+        host.ready(KakaoMapZoomBounds(min = 4, max = 18))
+
+        val rendered = host.renders.single()
+        assertEquals(18f, rendered.camera.zoom)
+        assertEquals(90f, rendered.camera.bearing)
+        assertEquals(listOf("latest"), rendered.content.markers.map(MapMarker::id))
+        assertEquals(KakaoMapZoomBounds(min = 4, max = 18), host.readyBounds.single())
+    }
+
+    @Test
+    fun cameraChangesAreRoundedClampedAndBearingIsNormalized() {
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(host)
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 5, max = 15))
+
+        coordinator.update(state(zoom = 4.6f, bearing = -10f, tilt = 90f), emptyContent(), null)
+        coordinator.update(state(zoom = 9.5f, bearing = 360f), emptyContent(), null)
+
+        assertEquals(3, host.renders.size)
+        assertEquals(5f, host.renders[1].camera.zoom)
+        assertEquals(350f, host.renders[1].camera.bearing)
+        assertEquals(90f, host.renders[1].camera.tilt)
+        assertEquals(10f, host.renders[2].camera.zoom)
+        assertEquals(0f, host.renders[2].camera.bearing)
+        assertEquals(0f, host.renders[2].camera.tilt)
+    }
+
+    @Test
+    fun markerReconciliationAddsUpdatesAndRemovesByStableId() {
+        val operations = mutableListOf<String>()
+        val reconciler = KakaoMapAndroidMarkerReconciler(
+            object : KakaoMapAndroidMarkerLayer {
+                override fun add(marker: MapMarker) {
+                    operations += "add:${marker.id}:${marker.title}"
+                }
+
+                override fun update(marker: MapMarker) {
+                    operations += "update:${marker.id}:${marker.title}"
+                }
+
+                override fun remove(markerId: String) {
+                    operations += "remove:$markerId"
+                }
+            },
+        )
+
+        reconciler.render(content(marker("a", title = "A"), marker("b", title = "B")))
+        reconciler.render(content(marker("a", title = "A2", latitude = 1.0), marker("c", title = "C")))
+
+        assertEquals(
+            listOf("add:a:A", "add:b:B", "update:a:A2", "add:c:C", "remove:b"),
+            operations,
+        )
+        assertEquals("detail", marker("a", snippet = "detail").snippet)
+    }
+
+    @Test
+    fun lateReadyAndErrorCallbacksAfterFinishAreIgnored() {
+        val host = FakeKakaoMapAndroidHost()
+        val errors = mutableListOf<Throwable>()
+        val coordinator = coordinator(host, onError = { errors += it })
+        coordinator.onAttach()
+        coordinator.onResume()
+        coordinator.onFinish()
+
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        host.fail(IllegalStateException("late"))
+
+        assertTrue(host.renders.isEmpty())
+        assertTrue(errors.isEmpty())
+        assertEquals(1, host.lifecycleCalls.count { it == "finish" })
+    }
+
+    @Test
+    fun renderErrorUsesCurrentCallbackAndIsDispatchedToMainThreadOnce() {
+        val pendingMainCallbacks = mutableListOf<() -> Unit>()
+        val initialErrors = mutableListOf<Throwable>()
+        val replacementErrors = mutableListOf<Throwable>()
+        val expectedMainThread = Thread.currentThread()
+        var callbackThread: Thread? = null
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(
+            host = host,
+            onError = {
+                initialErrors += it
+                callbackThread = Thread.currentThread()
+            },
+            dispatchToMain = { pendingMainCallbacks += it },
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        pendingMainCallbacks.removeAt(0).invoke()
+        host.failNextRender = true
+        coordinator.update(
+            state = state(zoom = 16f, tilt = 45f),
+            content = emptyContent(),
+            onError = { error ->
+                initialErrors += error
+                callbackThread = Thread.currentThread()
+            },
+        )
+        coordinator.update(
+            state = state(zoom = 16f, tilt = 45f),
+            content = emptyContent(),
+            onError = { error ->
+                replacementErrors += error
+                callbackThread = Thread.currentThread()
+            },
+        )
+        host.fail(IllegalArgumentException("duplicate native failure"))
+
+        assertTrue(initialErrors.isEmpty())
+        assertTrue(replacementErrors.isEmpty())
+        assertEquals(1, pendingMainCallbacks.size)
+        pendingMainCallbacks.single().invoke()
+
+        assertTrue(initialErrors.isEmpty())
+        assertEquals(1, replacementErrors.size)
+        val error = assertIs<KakaoMapException>(replacementErrors.single())
+        assertNotNull(error.cause)
+        assertEquals(expectedMainThread, callbackThread)
+    }
+
+    @Test
+    fun nativeErrorFromWorkerThreadIsDeliveredThroughTheMainDispatcher() {
+        val pendingMainCallbacks = mutableListOf<() -> Unit>()
+        val errors = mutableListOf<Throwable>()
+        var callbackThread: Thread? = null
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(
+            host = host,
+            onError = {
+                errors += it
+                callbackThread = Thread.currentThread()
+            },
+            dispatchToMain = { pendingMainCallbacks += it },
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+        val nativeCallbackThread = Thread { host.fail(IllegalStateException("native failure")) }
+        nativeCallbackThread.start()
+        nativeCallbackThread.join()
+
+        assertTrue(errors.isEmpty())
+        assertEquals(1, pendingMainCallbacks.size)
+        pendingMainCallbacks.single().invoke()
+
+        assertEquals(1, errors.size)
+        assertIs<KakaoMapException>(errors.single())
+        assertEquals(Thread.currentThread(), callbackThread)
+    }
+
+    @Test
+    fun missingErrorCallbackLeavesLastSuccessfulRenderIntact() {
+        val host = FakeKakaoMapAndroidHost()
+        val coordinator = coordinator(
+            host = host,
+            initialContent = content(marker("valid")),
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        host.failNextRender = true
+
+        coordinator.update(state(zoom = 10f), content(marker("failed")), onError = null)
+
+        assertEquals(1, host.renders.size)
+        assertEquals(listOf("valid"), host.renders.single().content.markers.map(MapMarker::id))
+        assertNull(host.lastReportedError)
+    }
+
+    private fun coordinator(
+        host: FakeKakaoMapAndroidHost,
+        appKey: String = "test-app-key",
+        initialState: WeftMapState = state(),
+        initialContent: MapContent = emptyContent(),
+        onError: ((Throwable) -> Unit)? = null,
+        dispatchToMain: ((() -> Unit) -> Unit) = { it() },
+    ): KakaoMapAndroidCoordinator = KakaoMapAndroidCoordinator(
+        host = host,
+        appKey = appKey,
+        initialState = initialState,
+        initialContent = initialContent,
+        onError = onError,
+        dispatchToMain = dispatchToMain,
+    )
+
+    private fun content(vararg markers: MapMarker): MapContent =
+        mapContentFactory.content(markers.toList())
+
+    private fun emptyContent(): MapContent = mapContentFactory.content(emptyList())
+}
+
+private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
+    val lifecycleCalls = mutableListOf<String>()
+    val startedAppKeys = mutableListOf<String>()
+    val readyBounds = mutableListOf<KakaoMapZoomBounds>()
+    val renders = mutableListOf<RenderedMap>()
+    var initializeSdk: (String) -> Unit = {}
+    var failNextRender: Boolean = false
+    var lastReportedError: Throwable? = null
+        private set
+    private var onReady: ((KakaoMapZoomBounds) -> Unit)? = null
+    private var onError: ((Throwable) -> Unit)? = null
+
+    override fun start(
+        appKey: String,
+        initialCamera: CameraPosition,
+        onReady: (KakaoMapZoomBounds) -> Unit,
+        onError: (Throwable) -> Unit,
+    ) {
+        lifecycleCalls += "start"
+        startedAppKeys += appKey
+        this.onReady = onReady
+        this.onError = onError
+        try {
+            KakaoMapAndroidSdkInitializer.initialize(appKey, initializeSdk)
+        } catch (throwable: Throwable) {
+            lastReportedError = throwable
+            onError(throwable)
+        }
+    }
+
+    override fun render(camera: CameraPosition, content: MapContent) {
+        if (failNextRender) {
+            failNextRender = false
+            throw IllegalArgumentException("render failed")
+        }
+        renders += RenderedMap(camera, content)
+    }
+
+    override fun resume() {
+        lifecycleCalls += "resume"
+    }
+
+    override fun pause() {
+        lifecycleCalls += "pause"
+    }
+
+    override fun finish() {
+        lifecycleCalls += "finish"
+    }
+
+    fun ready(bounds: KakaoMapZoomBounds) {
+        readyBounds += bounds
+        onReady?.invoke(bounds)
+    }
+
+    fun fail(throwable: Throwable) {
+        onError?.invoke(throwable)
+    }
+}
+
+private data class RenderedMap(
+    val camera: CameraPosition,
+    val content: MapContent,
+)
+
+private fun state(
+    zoom: Float = 15f,
+    bearing: Float = 0f,
+    tilt: Float = 0f,
+): WeftMapState = WeftMapState(
+    CameraPosition(
+        target = LatLng(latitude = 37.5665, longitude = 126.9780),
+        zoom = zoom,
+        bearing = bearing,
+        tilt = tilt,
+    ),
+)
+
+private fun marker(
+    id: String,
+    title: String? = null,
+    snippet: String? = null,
+    latitude: Double = 37.5665,
+): MapMarker = MapMarker(
+    id = id,
+    position = LatLng(latitude = latitude, longitude = 126.9780),
+    title = title,
+    snippet = snippet,
+)
+
+private class MapContentFactory : AutoCloseable {
+    private val frameClock = BroadcastFrameClock()
+    private val context = Dispatchers.Unconfined + frameClock
+    private val recomposer = Recomposer(context)
+    private val scope = CoroutineScope(SupervisorJob() + context)
+    private val recomposerJob = scope.launch { recomposer.runRecomposeAndApplyChanges() }
+    private val composition = Composition(CoordinatorTestNoOpApplier, recomposer)
+    private val currentContent = mutableStateOf<@Composable MapScope.() -> Unit>(
+        emptyContentLambda,
+        policy = neverEqualPolicy(),
+    )
+    private val snapshots = mutableListOf<MapContent>()
+    private var frameTimeNanos = 0L
+
+    init {
+        composition.setContent {
+            snapshots += rememberMapContent(currentContent.value)
+        }
+        recompose()
+    }
+
+    fun content(markers: List<MapMarker>): MapContent {
+        currentContent.value = { markers.forEach { Marker(it) } }
+        recompose()
+        return snapshots.last()
+    }
+
+    private fun recompose() {
+        Snapshot.sendApplyNotifications()
+        repeat(4) {
+            frameClock.sendFrame(++frameTimeNanos)
+            Snapshot.sendApplyNotifications()
+        }
+    }
+
+    override fun close() {
+        composition.dispose()
+        recomposerJob.cancel()
+        recomposer.cancel()
+        scope.cancel()
+    }
+}
+
+private val emptyContentLambda: @Composable MapScope.() -> Unit = {}
+
+private object CoordinatorTestNoOpApplier : AbstractApplier<Unit>(Unit) {
+    override fun insertTopDown(index: Int, instance: Unit) = Unit
+    override fun insertBottomUp(index: Int, instance: Unit) = Unit
+    override fun remove(index: Int, count: Int) = Unit
+    override fun move(from: Int, to: Int, count: Int) = Unit
+    override fun onClear() = Unit
+}
