@@ -14,12 +14,29 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
     private val clean: String = file.clean
     private val text: String = file.text
 
-    fun parse(): ParsedFile = ParsedFile(
-        declarations = parseDeclarations(),
-        installs = parseInstalls(),
-        lookups = parseLookups(),
-        healthChecks = parseHealthChecks(),
-    )
+    fun parse(): ParsedFile {
+        val installs = parseInstalls()
+        return ParsedFile(
+            declarations = parseDeclarations(),
+            installs = installs.map { it.site },
+            lookups = parseLookups(),
+            healthChecks = parseHealthChecks(),
+            secretIssues = parseSecrets() + installs.flatMap { it.forbiddenProperties },
+        )
+    }
+
+    // region Secrets
+
+    /**
+     * Scans the file as written for credentials that must not ship in an app.
+     *
+     * The raw text is scanned instead of the sanitized structure because secrets live inside string
+     * literals and comments; blanking them would hide exactly what must be found. The model records
+     * only the category and position, never the value.
+     */
+    private fun parseSecrets(): List<SecretIssue> = SecretRules.scan(file.path, text)
+
+    // endregion
 
     // region Declarations
 
@@ -87,9 +104,10 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
 
     // region install(...)
 
-    private fun parseInstalls(): List<InstallSite> {
-        val installs = mutableListOf<InstallSite>()
+    private fun parseInstalls(): List<ParsedInstall> {
+        val installs = mutableListOf<ParsedInstall>()
         for (match in installRegex.findAll(clean)) {
+            val forbidden = mutableListOf<SecretIssue>()
             val open = clean.indexOf('(', match.range.first)
             val close = SourceText.findMatching(clean, open, '(', ')') ?: continue
             val arguments = SourceText.splitTopLevel(clean, open + 1, close)
@@ -104,16 +122,27 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
             if (blockStart < clean.length && clean[blockStart] == '{') {
                 val blockEnd = SourceText.findMatching(clean, blockStart, '{', '}') ?: clean.lastIndex
                 val assignments = readAssignments(blockStart + 1, blockEnd)
-                literals = assignments.mapValues { it.value.first }
-                literalLocations = assignments.mapValues { it.value.second }
+                literals = assignments.literals.values.associate { it.property to it.literal }
+                literalLocations = assignments.literals.values.associate { it.property to it.location }
+                assignments.names.forEach { (property, offset) ->
+                    if (!SecretRules.isForbiddenClientProperty(property)) return@forEach
+                    forbidden += SecretIssue(
+                        rule = SecretRule.FORBIDDEN_CLIENT_PROPERTY,
+                        location = file.locationAt(offset),
+                        property = property,
+                    )
+                }
             }
 
-            installs += InstallSite(
-                symbol = symbol,
-                location = file.locationAt(match.range.first),
-                capabilityType = null,
-                literals = literals,
-                literalLocations = literalLocations,
+            installs += ParsedInstall(
+                site = InstallSite(
+                    symbol = symbol,
+                    location = file.locationAt(match.range.first),
+                    capabilityType = null,
+                    literals = literals,
+                    literalLocations = literalLocations,
+                ),
+                forbiddenProperties = forbidden,
             )
         }
         return installs
@@ -125,17 +154,20 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
      * Only direct string literals are returned: a value read from a variable, a call, or another
      * literal kind cannot be checked from source, and reporting it as empty would be wrong.
      */
-    private fun readAssignments(start: Int, end: Int): Map<String, Pair<StringLiteral, SourceLocation>> {
-        val assignments = linkedMapOf<String, Pair<StringLiteral, SourceLocation>>()
+    private fun readAssignments(start: Int, end: Int): BlockAssignments {
+        val literals = linkedMapOf<String, LiteralAssignment>()
+        val names = mutableListOf<Pair<String, Int>>()
         val region = clean.substring(start, end)
         for (match in assignmentRegex.findAll(region)) {
             val property = match.groupValues[1]
+            val offset = start + match.range.first
+            names += property to offset
             val valueStart = skipBlanks(start + match.range.last + 1)
             if (valueStart >= end || clean[valueStart] != '"') continue
             val (literal, _) = readLiteralAt(valueStart) ?: continue
-            assignments.putIfAbsent(property, literal to file.locationAt(start + match.range.first))
+            literals.putIfAbsent(property, LiteralAssignment(property, literal, file.locationAt(offset)))
         }
-        return assignments
+        return BlockAssignments(literals = literals, names = names)
     }
 
     // endregion
@@ -308,6 +340,25 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
         )
     }
 }
+
+/** An `install(...)` call together with the forbidden properties its block assigns. */
+internal data class ParsedInstall(
+    val site: InstallSite,
+    val forbiddenProperties: List<SecretIssue>,
+)
+
+/** A property written in a configuration block, whether or not its value is a literal. */
+internal data class LiteralAssignment(
+    val property: String,
+    val literal: StringLiteral,
+    val location: SourceLocation,
+)
+
+/** Every property name in a configuration block, plus the ones whose value is a readable literal. */
+internal data class BlockAssignments(
+    val literals: Map<String, LiteralAssignment>,
+    val names: List<Pair<String, Int>>,
+)
 
 /** Offsets into a source string, with [end] exclusive. */
 internal data class Span(val start: Int, val end: Int)

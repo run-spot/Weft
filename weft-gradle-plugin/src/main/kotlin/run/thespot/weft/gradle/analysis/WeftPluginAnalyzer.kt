@@ -25,9 +25,11 @@ internal class WeftAnalysis(
     val lookups: List<LookupSite>,
     val missingLookups: List<LookupSite>,
     val credentialIssues: List<CredentialIssue>,
+    val secretIssues: List<SecretIssue>,
     val healthChecks: List<DeclaredHealthCheck>,
 ) {
-    val isValid: Boolean get() = missingLookups.isEmpty() && credentialIssues.isEmpty()
+    val isValid: Boolean
+        get() = missingLookups.isEmpty() && credentialIssues.isEmpty() && secretIssues.isEmpty()
 }
 
 /**
@@ -82,6 +84,8 @@ internal class WeftPluginAnalyzer(private val options: WeftAnalysisOptions) {
 
         val declaredChecks = parsed.flatMap { it.healthChecks }
         val detectedChecks = detectedHealthChecks(installs)
+        val secretIssues = parsed.flatMap { it.secretIssues }
+            .distinctBy { it.rule to it.location.path to it.location.line to it.property }
 
         return WeftAnalysis(
             installedTypes = installedTypes,
@@ -89,6 +93,7 @@ internal class WeftPluginAnalyzer(private val options: WeftAnalysisOptions) {
             lookups = lookups,
             missingLookups = missingLookups,
             credentialIssues = credentialIssues,
+            secretIssues = secretIssues,
             healthChecks = (declaredChecks + detectedChecks).distinctBy { it.name to it.url },
         )
     }

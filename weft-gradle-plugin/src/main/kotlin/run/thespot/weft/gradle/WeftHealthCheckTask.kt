@@ -13,6 +13,7 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import run.thespot.weft.gradle.analysis.HealthCheckReport
+import run.thespot.weft.gradle.analysis.SecretRules
 import run.thespot.weft.gradle.analysis.WeftAnalysisOptions
 import run.thespot.weft.gradle.analysis.WeftPluginAnalyzer
 import run.thespot.weft.gradle.health.HealthCheckRequest
@@ -141,7 +142,8 @@ public abstract class WeftHealthCheckTask : DefaultTask() {
                     )
                     failures.forEach { failure ->
                         appendLine(
-                            "- ${failure.request.name} (${failure.request.url})" +
+                            "- ${failure.request.name} " +
+                                "(${SecretRules.mask(failure.request.url, failure.request.headers.values)})" +
                                 (failure.request.origin?.let { " from $it" } ?: "") +
                                 ": ${failure.detail}",
                         )

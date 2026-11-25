@@ -1,5 +1,6 @@
 package run.thespot.weft.gradle.health
 
+import run.thespot.weft.gradle.analysis.SecretRules
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -39,7 +40,7 @@ internal class HealthCheckRunner(
         if (request.name.isBlank()) return "health check has no name"
         if (request.url.isBlank()) return "health check '${request.name}' has no URL"
         if (!request.url.startsWith("http://") && !request.url.startsWith("https://")) {
-            return "health check '${request.name}' URL is not HTTP: ${request.url}"
+            return "health check '${request.name}' URL is not HTTP: ${masked(request, request.url)}"
         }
         request.headers.forEach { (name, value) ->
             if (name.isBlank()) return "health check '${request.name}' has a header with no name"
@@ -62,7 +63,7 @@ internal class HealthCheckRunner(
                 request.headers.forEach { (name, value) -> setRequestProperty(name, value) }
             }
             val status = connection.responseCode
-            val body = readBody(connection, status)
+            val body = masked(request, readBody(connection, status))
             HealthCheckResult(
                 request = request,
                 success = status in 200..299,
@@ -79,12 +80,23 @@ internal class HealthCheckRunner(
             HealthCheckResult(
                 request = request,
                 success = false,
-                detail = "could not reach ${request.url}: ${error.message ?: error::class.simpleName}",
+                detail = "could not reach ${masked(request, request.url)}: " +
+                    masked(request, error.message ?: error::class.simpleName.orEmpty()),
             )
         } finally {
             connection?.disconnect()
         }
     }
+
+    /**
+     * Removes this check's own credential values, and any value shaped like a known secret, from
+     * text that will be printed.
+     *
+     * A provider can echo the key it was given in an error body, and a URL can carry one as a query
+     * parameter, so masking happens here instead of trusting the response.
+     */
+    private fun masked(request: HealthCheckRequest, text: String): String =
+        SecretRules.mask(text, request.headers.values)
 
     private fun readBody(connection: HttpURLConnection, status: Int): String {
         val stream = runCatching {

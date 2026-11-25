@@ -91,7 +91,16 @@ plugins {
 }
 ~~~
 
-`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), or when an `install(...)` block configures a credential as an empty or placeholder string. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
+`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), when an `install(...)` block configures a credential as an empty or placeholder string, or when client code contains a credential that must not ship — a Supabase `service_role` JWT, a provider secret token (`sk-`, `ghp_`, `AKIA...`, `xox[baprs]-`, a private key block), or a privileged property such as `serviceRoleKey`. A finding reports only the category and `file:line`; the token never appears in the build output. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
+
+`verifyWeftDependencies` enforces the direct-dependency allowlist. It is opt-in, because adopting it is a policy decision:
+
+~~~kotlin
+weft {
+    enforceDependencyWhitelist = true
+    allowedDependencyGroups.add("com.example")  // or the whole family with "com.example.*"
+}
+~~~
 
 Capability libraries own their probes, because each provider knows its own endpoint. A plugin reports them through `WeftPlugin.healthCheck`, and a build can add one more:
 
@@ -105,8 +114,9 @@ weft {
 ~~~
 
 ~~~bash
-./gradlew verifyWeftPlugins   # offline, also runs with `check`
-./gradlew verifyWeftHealth    # network; run before a release or when credentials change
+./gradlew verifyWeftPlugins       # offline, also runs with `check`; blocks secrets too
+./gradlew verifyWeftDependencies  # offline; joins `check` when the whitelist is enforced
+./gradlew verifyWeftHealth        # network; run before a release or when credentials change
 ~~~
 
 Consumers can import the BOM to use the coordinated version without repeating it:

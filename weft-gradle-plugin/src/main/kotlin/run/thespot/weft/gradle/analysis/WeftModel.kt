@@ -55,4 +55,5 @@ internal data class ParsedFile(
     val installs: List<InstallSite> = emptyList(),
     val lookups: List<LookupSite> = emptyList(),
     val healthChecks: List<DeclaredHealthCheck> = emptyList(),
+    val secretIssues: List<SecretIssue> = emptyList(),
 )

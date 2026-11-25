@@ -132,6 +132,31 @@ class WeftGradlePluginTest {
     }
 
     @Test
+    fun offlineCheckFailsOnServiceRoleJwtWithoutPrintingIt() {
+        val token = serviceRoleJwt()
+        writeSource(
+            "src/commonMain/kotlin/Supabase.kt",
+            """
+            val weft = Weft {
+                install(SupabaseClient) {
+                    url = "https://project.supabase.co"
+                    anonKey = "$token"
+                }
+            }
+            """,
+        )
+
+        val error = assertFailsWith<GradleException> {
+            projectWithPlugin().pluginsVerification().verify()
+        }
+        val message = error.message.orEmpty()
+        assertTrue(message.contains("Supabase service_role JWT"), message)
+        assertTrue(message.contains("src/commonMain/kotlin/Supabase.kt:4"), message)
+        assertTrue(message.contains("Supabase Edge Functions"), message)
+        assertTrue(!message.contains(token), "the JWT must not be printed")
+    }
+
+    @Test
     fun healthCheckRunsTheProbeDerivedFromAnInstallBlock() {
         healthStatus = 200
         writeSource(
@@ -218,5 +243,15 @@ class WeftGradlePluginTest {
         project.healthVerification().verifyHealth()
 
         assertTrue(requestCount.get() >= 2, "expected both the configured and derived checks to run")
+    }
+
+    private fun serviceRoleJwt(): String {
+        val encoder = java.util.Base64.getUrlEncoder().withoutPadding()
+        fun encode(text: String) = encoder.encodeToString(text.toByteArray(Charsets.UTF_8))
+        return listOf(
+            encode("""{"alg":"HS256","typ":"JWT"}"""),
+            encode("""{"iss":"supabase","role":"service_role","iat":1700000000}"""),
+            encode("signature"),
+        ).joinToString(".")
     }
 }

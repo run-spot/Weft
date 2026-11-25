@@ -36,6 +36,8 @@ Maven Central distributes the Kotlin bridge artifact; it does not embed the Swif
 
 The server is a separate optional profile. Server-only dependencies are outside the app allowlist and must follow the selected backend architecture.
 
+Gradle application modules can also enforce the policy during the build: apply `:weft-gradle-plugin` (`id("weft.verify")`) and set `weft { enforceDependencyWhitelist = true }`. `verifyWeftDependencies` then runs with `check` and fails on a declared `group:name` that `allowedDependencyGroups` or `allowedDependencies` does not approve. The task inspects declared external modules only — project and file dependencies are skipped, test source sets are outside the allowlist, and an approved library may bring any transitive dependency its API needs. The machine-readable list in [`harness/dependency-policy.json`](../../harness/dependency-policy.json) remains the source of truth; the Gradle defaults mirror its platform groups.
+
 ## References
 
 - [Ktor Multiplatform client](https://ktor.io/docs/client-create-multiplatform-application.html)

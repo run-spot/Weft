@@ -13,9 +13,13 @@ import org.gradle.api.Project
  * ```
  *
  * - `verifyWeftPlugins` is offline and runs with `check`: it fails when a required `get<T>()` has no
- *   installed plugin, or when an `install(...)` block configures an empty or placeholder credential.
+ *   installed plugin, when an `install(...)` block configures an empty or placeholder credential, or
+ *   when client code contains a credential that must not ship (a Supabase `service_role` JWT, a
+ *   provider secret token, or a privileged configuration property).
  * - `verifyWeftHealth` is a separate, networked task: it runs every health check the modules and the
  *   build declare, and fails when a credential is blank, rejected, or the endpoint is unreachable.
+ * - `verifyWeftDependencies` checks the declared library allowlist and joins `check` once a build
+ *   sets `weft { enforceDependencyWhitelist = true }`.
  */
 public class WeftGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -44,6 +48,15 @@ public class WeftGradlePlugin : Plugin<Project> {
             checkTask.dependsOn(verifyPlugins)
         }
 
+        project.tasks.register("verifyWeftDependencies", WeftDependenciesVerifyTask::class.java) { task ->
+            task.group = "verification"
+            task.description =
+                "Fails when a dependency declared in this module is not on the Weft allowlist."
+            task.declaredDependencies.set(project.provider { collectDeclaredDependencies(project) })
+            task.allowedDependencyGroups.set(extension.allowedDependencyGroups)
+            task.allowedDependencies.set(extension.allowedDependencies)
+        }
+
         project.tasks.register("verifyWeftHealth", WeftHealthCheckTask::class.java) { task ->
             task.group = "verification"
             task.description =
@@ -58,6 +71,16 @@ public class WeftGradlePlugin : Plugin<Project> {
             task.detectCredentialProbes.set(extension.detectHealthChecks)
             task.timeoutSeconds.set(extension.healthCheckTimeoutSeconds)
             task.configuredChecks.set(project.provider { extension.healthCheckSpecs().map { it.toInput() } })
+        }
+
+        // The allowlist is opt-in: a build that has not adopted it keeps `check` as it was.
+        project.afterEvaluate {
+            val verifyDependencies = project.tasks.named("verifyWeftDependencies")
+            if (extension.enforceDependencyWhitelist.getOrElse(false)) {
+                project.tasks.matching { it.name == "check" }.configureEach { checkTask ->
+                    checkTask.dependsOn(verifyDependencies)
+                }
+            }
         }
     }
 }

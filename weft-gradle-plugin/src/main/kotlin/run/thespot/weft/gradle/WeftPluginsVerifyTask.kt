@@ -19,9 +19,12 @@ import java.io.File
 
 /**
  * Offline check that fails a build when the project resolves a Weft capability it never installed,
- * or when an `install(...)` block configures a credential as an empty or placeholder string.
+ * when an `install(...)` block configures a credential as an empty or placeholder string, or when
+ * client code contains a credential that must not ship (a Supabase `service_role` JWT, a provider
+ * secret token, or a privileged configuration property).
  *
- * Runs as part of `check`, so it needs no network and never touches a provider.
+ * Runs as part of `check`, so it needs no network and never touches a provider. A finding reports a
+ * category and `file:line` only; the value is never carried into the model or the message.
  */
 public abstract class WeftPluginsVerifyTask : DefaultTask() {
     /** Kotlin sources to scan. */

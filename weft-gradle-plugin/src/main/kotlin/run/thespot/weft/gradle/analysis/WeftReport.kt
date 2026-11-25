@@ -5,6 +5,10 @@ internal object WeftReport {
     fun offline(analysis: WeftAnalysis): String {
         val sections = mutableListOf<String>()
 
+        if (analysis.secretIssues.isNotEmpty()) {
+            sections += secretSection(analysis)
+        }
+
         if (analysis.missingLookups.isNotEmpty()) {
             val byType = analysis.missingLookups.groupBy { it.type }
             sections += buildString {
@@ -43,7 +47,9 @@ internal object WeftReport {
                     append(
                         when (issue.kind) {
                             CredentialIssueKind.EMPTY -> "an empty string"
-                            CredentialIssueKind.PLACEHOLDER -> "\"${issue.value}\""
+                            // Usually a harmless placeholder, but a value shaped like a real token is
+                            // masked before it can reach the log.
+                            CredentialIssueKind.PLACEHOLDER -> "\"${SecretRules.mask(issue.value)}\""
                         },
                     )
                     appendLine(".")
@@ -58,6 +64,33 @@ internal object WeftReport {
 
         sections += installedSummary(analysis)
         return sections.joinToString("\n\n")
+    }
+
+    /**
+     * Reports each finding by category and `file:line` only.
+     *
+     * The message is the plugin's most public output, so it deliberately repeats no value: not the
+     * token, not a prefix, and not the decoded JWT payload beyond the role it is rejected for.
+     */
+    private fun secretSection(analysis: WeftAnalysis): String = buildString {
+        appendLine(
+            "Weft secret verification failed: ${analysis.secretIssues.size} sensitive " +
+                "value${if (analysis.secretIssues.size == 1) " was" else "s were"} found in " +
+                "client code.",
+        )
+        analysis.secretIssues.forEach { issue ->
+            appendLine()
+            when {
+                issue.property != null -> appendLine(
+                    "- ${issue.location} sets `${issue.property}` in an `install(...)` block " +
+                        "(${issue.rule.label}).",
+                )
+
+                else -> appendLine("- ${issue.location}: ${issue.rule.label}.")
+            }
+        }
+        appendLine()
+        append(SecretRules.GUIDANCE)
     }
 
     private fun installedSummary(analysis: WeftAnalysis): String {

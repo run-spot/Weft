@@ -7,10 +7,11 @@ import org.gradle.api.model.ObjectFactory
 import org.gradle.api.provider.MapProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.SetProperty
+import run.thespot.weft.gradle.analysis.DependencyWhitelist
 import javax.inject.Inject
 
 /**
- * Configuration for the two Weft verification tasks.
+ * Configuration for the three Weft verification tasks.
  *
  * ```kotlin
  * plugins {
@@ -24,6 +25,10 @@ import javax.inject.Inject
  *     // Plugins published by a dependency, which source scanning cannot see.
  *     installedTypes.add("PushPlugin")
  *     pluginTypes.put("NaverMap", "MapPlugin")
+ *
+ *     // Apply the direct-dependency allowlist in `check` as well.
+ *     enforceDependencyWhitelist = true
+ *     allowedDependencyGroups.add("com.example")
  *
  *     // Endpoints the plugin modules report; the task runs them all in one pass.
  *     healthCheck("supabase") {
@@ -67,6 +72,30 @@ public abstract class WeftExtension @Inject constructor(project: Project) {
     /** Whether `verifyWeftHealth` also derives probes from credentials written in `install(...)`. */
     public val detectHealthChecks: Property<Boolean> =
         objects.property(Boolean::class.java).convention(true)
+
+    /**
+     * Whether `check` also runs `verifyWeftDependencies`.
+     *
+     * Off by default so an existing build keeps its current dependency set; turning it on is the
+     * deliberate step that applies the Weft allowlist to this module.
+     */
+    public val enforceDependencyWhitelist: Property<Boolean> =
+        objects.property(Boolean::class.java).convention(false)
+
+    /**
+     * Dependency groups `verifyWeftDependencies` approves.
+     *
+     * An entry approves its own group and any dotted child (`io.ktor` covers
+     * `io.ktor.client.core`), and an entry ending in `.*` approves the whole family
+     * (`androidx.*`). The defaults are the standard Weft/KMP/Compose/AndroidX/Google groups; add to
+     * them for one more library family, or `set(listOf(...))` to replace them.
+     */
+    public val allowedDependencyGroups: SetProperty<String> =
+        objects.setProperty(String::class.java).convention(DependencyWhitelist.defaultGroups)
+
+    /** Exact `group:name` modules `verifyWeftDependencies` approves beyond the allowed groups. */
+    public val allowedDependencies: SetProperty<String> =
+        objects.setProperty(String::class.java).convention(emptyList())
 
     /** Timeout applied to each health check request. */
     public val healthCheckTimeoutSeconds: Property<Int> =

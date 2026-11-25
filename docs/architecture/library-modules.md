@@ -62,7 +62,11 @@ override fun healthCheck(plugin: SupabasePlugin): List<WeftHealthCheck> = listOf
 )
 ~~~
 
-`:weft-gradle-plugin` aggregates those probes with the endpoints a build configures and runs them in one `verifyWeftHealth` pass; its offline `verifyWeftPlugins` task runs inside `check`. Both are described in [`weft-gradle-plugin/AGENTS.md`](../../weft-gradle-plugin/AGENTS.md).
+`:weft-gradle-plugin` aggregates those probes with the endpoints a build configures and runs them in one `verifyWeftHealth` pass; its offline `verifyWeftPlugins` task runs inside `check` and also rejects credentials that must never reach a client build (a Supabase `service_role` JWT, a provider secret token, or a privileged property such as `serviceRoleKey`), reporting only `file:line` and the category so the value is never printed. Both are described in [`weft-gradle-plugin/AGENTS.md`](../../weft-gradle-plugin/AGENTS.md).
+
+## Dependency allowlist verification
+
+The direct-dependency policy in [Application dependency policy](dependency-policy.md) is enforced for Gradle builds by the same plugin. `verifyWeftDependencies` compares every external module a module declares against `allowedDependencyGroups` and `allowedDependencies`, with defaults for the Weft, Kotlin, Compose, Kotlinx, Ktor, AndroidX, and Google groups. A build that adopts the policy sets `weft { enforceDependencyWhitelist = true }`, which also runs the check with `check`; without that switch the task exists but is not part of the build. Project and file dependencies are skipped because they have no Maven coordinate, an approved library may bring any transitive dependency its API needs, and test source sets are outside the allowlist.
 
 ## Source ownership
 

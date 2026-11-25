@@ -30,6 +30,13 @@ class HealthCheckRunnerTest {
             exchange.sendResponseHeaders(response.first, response.second.length.toLong())
             exchange.responseBody.use { it.write(response.second.toByteArray()) }
         }
+        server.createContext("/echo") { exchange ->
+            requestCount.incrementAndGet()
+            val apiKey = exchange.requestHeaders.getFirst("apikey").orEmpty()
+            val response = """{"error":"invalid api key: $apiKey"}"""
+            exchange.sendResponseHeaders(401, response.length.toLong())
+            exchange.responseBody.use { it.write(response.toByteArray()) }
+        }
         server.createContext("/forbidden") { exchange ->
             requestCount.incrementAndGet()
             exchange.sendResponseHeaders(403, -1)
@@ -74,6 +81,23 @@ class HealthCheckRunnerTest {
         assertEquals(401, result.status)
         assertTrue(result.detail.orEmpty().contains("credential was rejected"), result.detail)
         assertTrue(result.detail.orEmpty().contains("invalid api key"), result.detail)
+    }
+
+    @Test
+    fun aRejectionBodyCannotLeakTheCredential() {
+        val result = runner.run(
+            HealthCheckRequest(
+                name = "supabase-auth",
+                url = url("/echo"),
+                headers = mapOf("apikey" to "secret-service-key-value"),
+            ),
+        )
+
+        assertFalse(result.success)
+        val detail = result.detail.orEmpty()
+        assertTrue(detail.contains("credential was rejected"), detail)
+        assertFalse(detail.contains("secret-service-key-value"), detail)
+        assertTrue(detail.contains("<redacted>"), detail)
     }
 
     @Test

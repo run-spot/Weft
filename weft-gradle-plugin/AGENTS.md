@@ -11,15 +11,18 @@ plugins {
 }
 ~~~
 
-It registers two tasks and the `weft { }` extension:
+It registers three tasks and the `weft { }` extension:
 
 | Task | Network | Wired into `check` | Purpose |
 | --- | --- | --- | --- |
-| `verifyWeftPlugins` | no | yes | Every required `.get<T>()` has an installed plugin, and every credential literal in an `install(...)` block is real |
+| `verifyWeftPlugins` | no | yes | Every required `.get<T>()` has an installed plugin, every credential literal in an `install(...)` block is real, and no secret or privileged credential ships in client code |
+| `verifyWeftDependencies` | no | only with `weft { enforceDependencyWhitelist = true }` | Every declared dependency is on the Weft allowlist |
 | `verifyWeftHealth` | yes | no | Every configured and module-declared health check answers correctly |
 
 The split is deliberate: `check` must pass in an offline sandbox and on every pull request, while a
 credential probe needs the provider. A release job or a developer runs `./gradlew verifyWeftHealth`.
+The dependency allowlist stays opt-in so an existing build keeps its current dependency set until it
+adopts the policy.
 
 ## `verifyWeftPlugins`
 
@@ -38,6 +41,56 @@ Resolution of `install(NaverMap)` to `MapPlugin` uses, in order: an explicit
 `override val type: KClass<MapPlugin> = MapPlugin::class`, the second type argument of a
 `WeftPlugin<TConfig, TPlugin>` supertype, and the build's `pluginTypes` map for plugins declared
 outside the scanned sources.
+
+## Secret and privileged-credential blocking
+
+The same offline task rejects a value that must never reach a client build. It scans each Kotlin
+file as written, because the values live in string literals and a key left in a comment is still a
+leaked key:
+
+- **Supabase `service_role` JWT**: a JWT literal is decoded only far enough to read its `role` claim.
+  `service_role` fails immediately; the public `anon` role is allowed, and a token without a `role`
+  claim is left alone.
+- **Provider secret tokens**: `sk-...` (OpenAI/Stripe style, including `sk-proj-...`), `ghp_`,
+  `gho_`, `github_pat_`, `AKIA` + 16 characters, `xox[baprs]-`, and
+  `-----BEGIN ... PRIVATE KEY-----` blocks.
+- **Forbidden client properties** in an `install(...)` block: `serviceRole`, `serviceRoleKey`,
+  `adminKey`, `secretKey`, `privateKey`, `clientSecret`. A property is rejected whether its value is
+  a literal or read from the environment, because handing the app a privileged credential is the
+  design error, not the literal.
+
+**Strict masking**: no message, log line, or exception may contain the value. A finding reports
+`file:line`, the category (for example `Supabase service_role JWT` or `Secret token prefix (sk-)`),
+and the guidance `Sensitive keys must not be placed in client code or chat; move them to Supabase
+Edge Functions (supabase secrets set).` The analyzer keeps no copy of the value, so the report cannot
+leak one by accident.
+
+`verifyWeftHealth` masks too: a provider that echoes the key it was sent in an error body, and a URL
+that carries one as a query parameter, are redacted before the report is printed.
+
+## `verifyWeftDependencies`
+
+The task enforces the direct-dependency allowlist from `harness/dependency-policy.json`. It reads the
+dependencies declared in this module and fails on an `group:name` that no rule approves:
+
+~~~kotlin
+weft {
+    enforceDependencyWhitelist = true       // also run with `check`
+    allowedDependencyGroups.add("de.mypkg") // approve a group, or the whole family with `de.mypkg.*`
+    allowedDependencies.add("io.ktor:ktor-client-okhttp") // approve one exact module
+}
+~~~
+
+- An `allowedDependencyGroups` entry approves its own group and any dotted child, so `io.ktor`
+  covers `io.ktor.client.core`; an entry ending in `.*` approves the whole family, as `androidx.*`
+  does. The default list is `run.thespot.weft`, `org.jetbrains.kotlin`, `org.jetbrains.compose`,
+  `org.jetbrains.kotlinx`, `io.ktor`, `androidx.*`, and `com.google.*`; `allowedDependencies` is
+  empty by default.
+- Only declared external modules are inspected: project and file dependencies have no Maven
+  coordinate, and an approved library may bring any transitive dependency its API needs. Test source
+  sets are skipped because they do not ship with the app.
+- The task runs on request at any time; wiring it into `check` is the explicit step that applies the
+  policy to a module.
 
 ## `verifyWeftHealth`
 
@@ -63,6 +116,10 @@ plugin only collects and runs them.
 - Keep `verifyWeftPlugins` offline and deterministic: no network, no provider SDK, no Gradle worker
   that needs a device. `check` depends on it.
 - Keep `verifyWeftHealth` out of `check`; it reaches the network and needs real credentials.
+- Never put a detected secret, a header value, or a token from a response into a message. Report the
+  category and `file:line`, and mask anything else that is printed.
+- Keep `verifyWeftDependencies` opt-in for `check`; a library that is missing from the allowlist is
+  a policy decision, not something a plugin should impose on a build that never asked for it.
 - Do not hard-code vendor knowledge in a second place. A new provider belongs in its capability
   module as a `WeftHealthCheck`, with a derived fallback only when the credential is written
   literally in an `install(...)` block.
