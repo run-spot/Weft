@@ -71,6 +71,9 @@ internal class KakaoMapAndroidMapViewHost(
 
     override fun render(camera: CameraPosition, content: MapContent) {
         val readyMap = checkNotNull(kakaoMap) { "KakaoMap is not ready." }
+        val previousNativeCamera = checkNotNull(readyMap.cameraPosition) {
+            "Kakao Maps did not provide its current camera position."
+        }
         val cameraPosition = KakaoCameraPosition.from(
             camera.target.latitude,
             camera.target.longitude,
@@ -79,12 +82,18 @@ internal class KakaoMapAndroidMapViewHost(
             normalizeBearing(camera.bearing).toDouble(),
             0.0,
         )
-        readyMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
-
         val reconciler = markerReconciler ?: createMarkerReconciler(readyMap).also {
             markerReconciler = it
         }
-        reconciler.render(content)
+        reconciler.renderWithCamera(
+            content = content,
+            applyCamera = {
+                readyMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+            },
+            restoreCamera = {
+                readyMap.moveCamera(CameraUpdateFactory.newCameraPosition(previousNativeCamera))
+            },
+        )
     }
 
     override fun resume() {
@@ -139,6 +148,12 @@ internal class KakaoMapAndroidMapViewHost(
 
                 override fun remove(markerId: String) {
                     labels.remove(markerId)?.remove()
+                }
+
+                override fun restore(markers: List<MapMarker>) {
+                    layer.removeAll()
+                    labels.clear()
+                    markers.forEach(::add)
                 }
             },
         )

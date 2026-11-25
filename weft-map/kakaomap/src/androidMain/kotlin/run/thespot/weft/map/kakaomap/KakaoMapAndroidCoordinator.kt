@@ -253,33 +253,101 @@ internal interface KakaoMapAndroidMarkerLayer {
     fun update(marker: MapMarker)
 
     fun remove(markerId: String)
+
+    /** Restore the complete last committed native marker snapshot after a partial failed pass. */
+    fun restore(markers: List<MapMarker>)
 }
 
 internal class KakaoMapAndroidMarkerReconciler(
     private val layer: KakaoMapAndroidMarkerLayer,
 ) {
     private var renderedMarkers: Map<String, MapMarker> = emptyMap()
+    private var layerSynchronized = true
+
+    internal val snapshot: List<MapMarker>
+        get() = renderedMarkers.values.toList()
 
     fun render(content: MapContent) {
-        val nextMarkers = linkedMapOf<String, MapMarker>()
-        content.markers.forEach { marker ->
-            require(nextMarkers.put(marker.id, marker) == null) {
-                "Map content contains duplicate marker id '${marker.id}'."
-            }
+        val nextMarkers = content.markers.toMarkerMap()
+        if (!layerSynchronized) {
+            layer.restore(nextMarkers.values.toList())
+            renderedMarkers = nextMarkers
+            layerSynchronized = true
+            return
         }
 
-        nextMarkers.forEach { (id, marker) ->
-            when {
-                id !in renderedMarkers -> layer.add(marker)
-                renderedMarkers[id] != marker -> layer.update(marker)
+        val previousSnapshot = snapshot
+        try {
+            nextMarkers.forEach { (id, marker) ->
+                when {
+                    id !in renderedMarkers -> layer.add(marker)
+                    renderedMarkers[id] != marker -> layer.update(marker)
+                }
             }
-        }
-        renderedMarkers.keys
-            .filterNot(nextMarkers::containsKey)
-            .forEach(layer::remove)
+            renderedMarkers.keys
+                .filterNot(nextMarkers::containsKey)
+                .forEach(layer::remove)
 
-        renderedMarkers = nextMarkers
+            renderedMarkers = nextMarkers
+        } catch (renderFailure: Throwable) {
+            try {
+                restore(previousSnapshot)
+            } catch (rollbackFailure: Throwable) {
+                renderFailure.addSuppressedSafely(rollbackFailure)
+            }
+            throw renderFailure
+        }
     }
+
+    /** Restore a known committed snapshot after a later camera operation fails. */
+    fun restore(snapshot: List<MapMarker>) {
+        val restoredMarkers = snapshot.toMarkerMap()
+        try {
+            layer.restore(snapshot)
+        } catch (rollbackFailure: Throwable) {
+            layerSynchronized = false
+            throw rollbackFailure
+        }
+        renderedMarkers = restoredMarkers
+        layerSynchronized = true
+    }
+
+    /** Apply markers before camera and restore both resources if the camera mutation fails. */
+    fun renderWithCamera(
+        content: MapContent,
+        applyCamera: () -> Unit,
+        restoreCamera: () -> Unit,
+    ) {
+        val previousMarkers = snapshot
+        render(content)
+        try {
+            applyCamera()
+        } catch (renderFailure: Throwable) {
+            try {
+                restore(previousMarkers)
+            } catch (rollbackFailure: Throwable) {
+                renderFailure.addSuppressedSafely(rollbackFailure)
+            }
+            try {
+                restoreCamera()
+            } catch (rollbackFailure: Throwable) {
+                renderFailure.addSuppressedSafely(rollbackFailure)
+            }
+            throw renderFailure
+        }
+    }
+}
+
+private fun List<MapMarker>.toMarkerMap(): Map<String, MapMarker> = linkedMapOf<String, MapMarker>().also { map ->
+    forEach { marker ->
+        require(map.put(marker.id, marker) == null) {
+            "Map content contains duplicate marker id '${marker.id}'."
+        }
+    }
+}
+
+internal fun Throwable.addSuppressedSafely(rollbackFailure: Throwable) {
+    if (rollbackFailure !== this) addSuppressed(rollbackFailure)
 }
 
 private fun CameraPosition.normalizeFor(bounds: KakaoMapZoomBounds): CameraPosition = copy(

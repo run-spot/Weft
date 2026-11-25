@@ -25,9 +25,11 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KakaoMapAndroidCoordinatorTest {
@@ -66,6 +68,7 @@ class KakaoMapAndroidCoordinatorTest {
         coordinator.onDetach()
         coordinator.onAttach()
         coordinator.onResume()
+        assertEquals(KakaoMapAndroidCoordinatorState.Ready, coordinator.state)
         coordinator.onFinish()
         assertEquals(KakaoMapAndroidCoordinatorState.Finished, coordinator.state)
         coordinator.onFinish()
@@ -176,31 +179,137 @@ class KakaoMapAndroidCoordinatorTest {
 
     @Test
     fun markerReconciliationAddsUpdatesAndRemovesByStableId() {
-        val operations = mutableListOf<String>()
-        val reconciler = KakaoMapAndroidMarkerReconciler(
-            object : KakaoMapAndroidMarkerLayer {
-                override fun add(marker: MapMarker) {
-                    operations += "add:${marker.id}:${marker.title}"
-                }
-
-                override fun update(marker: MapMarker) {
-                    operations += "update:${marker.id}:${marker.title}"
-                }
-
-                override fun remove(markerId: String) {
-                    operations += "remove:$markerId"
-                }
-            },
-        )
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
 
         reconciler.render(content(marker("a", title = "A"), marker("b", title = "B")))
         reconciler.render(content(marker("a", title = "A2", latitude = 1.0), marker("c", title = "C")))
 
         assertEquals(
             listOf("add:a:A", "add:b:B", "update:a:A2", "add:c:C", "remove:b"),
-            operations,
+            layer.operations,
         )
         assertEquals("detail", marker("a", snippet = "detail").snippet)
+    }
+
+    @Test
+    fun markerReconciliationRestoresCommittedLayerWhenLaterMutationThrows() {
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
+        val committed = marker("a", title = "before")
+        reconciler.render(content(committed))
+        val originalFailure = IllegalStateException("native add partially failed")
+        layer.failAfterMutatingAddId = "b"
+        layer.failure = originalFailure
+
+        val failure = assertFailsWith<IllegalStateException> {
+            reconciler.render(content(marker("a", title = "updated"), marker("b", title = "new")))
+        }
+
+        assertSame(originalFailure, failure)
+        assertEquals(listOf(committed), layer.markers.values.toList())
+        assertEquals(listOf(committed), reconciler.snapshot)
+    }
+
+    @Test
+    fun failedInitialMarkerRenderRestoresTheEmptyLayer() {
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
+        layer.failAfterMutatingAddId = "first"
+
+        assertFailsWith<IllegalStateException> {
+            reconciler.render(content(marker("first"), marker("second")))
+        }
+
+        assertTrue(layer.markers.isEmpty())
+        assertTrue(reconciler.snapshot.isEmpty())
+    }
+
+    @Test
+    fun cameraFailureRestoresThePriorMarkerSnapshotAndCamera() {
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
+        val previousMarker = marker("a", title = "before")
+        val nextMarker = marker("a", title = "after")
+        val previousCamera = "camera-before"
+        var camera = previousCamera
+        reconciler.render(content(previousMarker))
+        val cameraFailure = IllegalArgumentException("camera update failed")
+
+        val failure = assertFailsWith<IllegalArgumentException> {
+            reconciler.renderWithCamera(
+                content = content(nextMarker),
+                applyCamera = {
+                    camera = "camera-after"
+                    throw cameraFailure
+                },
+                restoreCamera = { camera = previousCamera },
+            )
+        }
+
+        assertSame(cameraFailure, failure)
+        assertEquals(listOf(previousMarker), layer.markers.values.toList())
+        assertEquals(previousCamera, camera)
+        assertEquals(listOf(previousMarker), reconciler.snapshot)
+    }
+
+    @Test
+    fun cameraFailureKeepsTheOriginalErrorAndSuppressesBothRollbackFailures() {
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
+        reconciler.render(content(marker("a", title = "before")))
+        val cameraFailure = IllegalStateException("camera update failed")
+        val markerRollbackFailure = IllegalArgumentException("marker restore failed")
+        val cameraRollbackFailure = UnsupportedOperationException("camera restore failed")
+        layer.failRestoreWith = markerRollbackFailure
+
+        val failure = assertFailsWith<IllegalStateException> {
+            reconciler.renderWithCamera(
+                content = content(marker("a", title = "after")),
+                applyCamera = { throw cameraFailure },
+                restoreCamera = { throw cameraRollbackFailure },
+            )
+        }
+
+        assertSame(cameraFailure, failure)
+        assertEquals(listOf(markerRollbackFailure, cameraRollbackFailure), failure.suppressed.toList())
+    }
+
+    @Test
+    fun rollbackFailureIsSuppressedOnTheOriginalRenderFailure() {
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
+        val renderFailure = IllegalStateException("partial marker add failed")
+        val rollbackFailure = IllegalArgumentException("marker restore failed")
+        layer.failAfterMutatingAddId = "first"
+        layer.failure = renderFailure
+        layer.failRestoreWith = rollbackFailure
+
+        val failure = assertFailsWith<IllegalStateException> {
+            reconciler.render(content(marker("first")))
+        }
+
+        assertSame(renderFailure, failure)
+        assertEquals(listOf(rollbackFailure), failure.suppressed.toList())
+    }
+
+    @Test
+    fun nextPassRebuildsTheLayerAfterRollbackCouldNotRestoreIt() {
+        val layer = FakeTransactionalMarkerLayer()
+        val reconciler = KakaoMapAndroidMarkerReconciler(layer)
+        val rollbackFailure = IllegalArgumentException("restore failed")
+        layer.failAfterMutatingAddId = "first"
+        layer.failRestoreWith = rollbackFailure
+
+        assertFailsWith<IllegalStateException> {
+            reconciler.render(content(marker("first"), marker("second")))
+        }
+        assertTrue(layer.markers.isEmpty())
+
+        reconciler.render(content(marker("first"), marker("second")))
+
+        assertEquals(listOf("first", "second"), layer.markers.keys.toList())
+        assertEquals(2, layer.operations.count { it == "restore" })
     }
 
     @Test
@@ -303,19 +412,25 @@ class KakaoMapAndroidCoordinatorTest {
     @Test
     fun missingErrorCallbackLeavesLastSuccessfulRenderIntact() {
         val host = FakeKakaoMapAndroidHost()
+        val validMarker = marker("valid", title = "committed")
         val coordinator = coordinator(
             host = host,
-            initialContent = content(marker("valid")),
+            initialContent = content(validMarker),
         )
         coordinator.onAttach()
         coordinator.onResume()
         host.ready(KakaoMapZoomBounds(min = 2, max = 18))
-        host.failNextRender = true
+        host.failAfterMutatingMarkerAddId = "failed"
 
-        coordinator.update(state(zoom = 10f), content(marker("failed")), onError = null)
+        coordinator.update(
+            state(zoom = 10f),
+            content(validMarker.copy(title = "partially-updated"), marker("failed")),
+            onError = null,
+        )
 
         assertEquals(1, host.renders.size)
         assertEquals(listOf("valid"), host.renders.single().content.markers.map(MapMarker::id))
+        assertEquals(listOf(validMarker), host.markerLayer.markers.values.toList())
         assertNull(host.lastReportedError)
     }
 
@@ -346,8 +461,11 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
     val startedAppKeys = mutableListOf<String>()
     val readyBounds = mutableListOf<KakaoMapZoomBounds>()
     val renders = mutableListOf<RenderedMap>()
+    val markerLayer = FakeTransactionalMarkerLayer()
+    private val markerReconciler = KakaoMapAndroidMarkerReconciler(markerLayer)
     var initializeSdk: (String) -> Unit = {}
     var failNextRender: Boolean = false
+    var failAfterMutatingMarkerAddId: String? = null
     var lastReportedError: Throwable? = null
         private set
     private var onReady: ((KakaoMapZoomBounds) -> Unit)? = null
@@ -372,10 +490,17 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
     }
 
     override fun render(camera: CameraPosition, content: MapContent) {
-        if (failNextRender) {
-            failNextRender = false
-            throw IllegalArgumentException("render failed")
-        }
+        markerLayer.failAfterMutatingAddId = failAfterMutatingMarkerAddId
+        markerReconciler.renderWithCamera(
+            content = content,
+            applyCamera = {
+                if (failNextRender) {
+                    failNextRender = false
+                    throw IllegalArgumentException("camera render failed")
+                }
+            },
+            restoreCamera = {},
+        )
         renders += RenderedMap(camera, content)
     }
 
@@ -405,6 +530,43 @@ private data class RenderedMap(
     val camera: CameraPosition,
     val content: MapContent,
 )
+
+private class FakeTransactionalMarkerLayer : KakaoMapAndroidMarkerLayer {
+    val operations = mutableListOf<String>()
+    val markers = linkedMapOf<String, MapMarker>()
+    var failAfterMutatingAddId: String? = null
+    var failure: Throwable = IllegalStateException("fake marker mutation failure")
+    var failRestoreWith: Throwable? = null
+
+    override fun add(marker: MapMarker) {
+        operations += "add:${marker.id}:${marker.title}"
+        markers[marker.id] = marker
+        if (marker.id == failAfterMutatingAddId) {
+            failAfterMutatingAddId = null
+            throw failure
+        }
+    }
+
+    override fun update(marker: MapMarker) {
+        operations += "update:${marker.id}:${marker.title}"
+        markers[marker.id] = marker
+    }
+
+    override fun remove(markerId: String) {
+        operations += "remove:$markerId"
+        markers.remove(markerId)
+    }
+
+    override fun restore(markers: List<MapMarker>) {
+        operations += "restore"
+        this.markers.clear()
+        failRestoreWith?.let { failure ->
+            failRestoreWith = null
+            throw failure
+        }
+        markers.forEach { marker -> this.markers[marker.id] = marker }
+    }
+}
 
 private fun state(
     zoom: Float = 15f,
