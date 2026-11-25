@@ -239,33 +239,34 @@
 - Create: `harness/fixtures/weft-kakaomap-ios-consumer/WeftKakaoConsumer/AppDelegate.swift`
 - Create/modify: `.swiftpm-locks/default/swiftImport/Package.resolved` and the generated linkage package under `harness/fixtures/weft-kakaomap-ios-consumer/SwiftPM/`
 
-- [ ] **Step 1: Write failing fake-host iOS coordinator tests**
+- [x] **Step 1: Write failing fake-host iOS coordinator tests**
   - Test zero-bounds attach defers preparation, non-zero layout prepares once, and window detach/reattach pauses/reactivates.
   - Test `MapPoint` coordinate mapping, `roundToInt` plus zoom min/max clamping, normalized bearing and clamped tilt conversion with `PI / 180`, and non-animated camera updates.
   - Test marker same-ID position/title updates, removal, ID-change remove/add behavior, and deterministic style/layer identity.
   - Test same process-global key is a no-op, a different key calls `onError`, `authenticationFailed`/`addViewFailed` route `KakaoMapException`, and late callbacks after reset are ignored.
   - Test render errors, callback replacement, idempotent reset, and once-per-generation main-thread error delivery.
 
-- [ ] **Step 2: Add the SwiftPM configuration and run the compatibility gate**
+- [x] **Step 2: Add the SwiftPM configuration and run the compatibility gate**
   - Configuration-only change (before production iOS source): add `swiftPMDependencies` with `discoverClangModulesImplicitly = true`, `swiftPackage(url = url("https://github.com/kakao-mapsSDK/KakaoMapsSDK-SPM.git"), version = exact("2.12.19"), products = listOf(product("KakaoMapsSDK-SPM", platforms = setOf(iOS()))))`, and `iosMinimumDeploymentTarget.set("13.0")`.
   - Run: `./gradlew :weft-map:kakaomap:fetchSyntheticImportProjectPackages`
   - Run: `./gradlew :weft-map:kakaomap:compileKotlinIosArm64`
   - Expected: either the documented SwiftPM/Kotlin 2.4.21 incompatibility is reported, or the compile proceeds to the expected missing-iOS-source/actual failure. If the DSL/import namespace is unavailable, stop and report the exact error; do not change the root Kotlin version silently.
 
-- [ ] **Step 3: Implement the iOS SwiftPM boundary**
+- [x] **Step 3: Implement the iOS SwiftPM boundary**
   - Keep the exact SwiftPM configuration from Step 2; the generated imports must resolve under `swiftPMImport` for the provider's group/project namespace.
   - Import generated `swiftPMImport` symbols only in `iosMain`; keep `KMController`, `KMViewContainer`, `KakaoMap`, `MapPoint`, `MapviewInfo`, `SDKInitializer`, and UIKit types out of commonMain.
   - Implement the fakeable coordinator state machine, one default Poi style/layer per map view, camera conversion, resource/error handling, and generation invalidation.
-  - Run `XCODEPROJ_PATH="$PWD/harness/fixtures/weft-kakaomap-ios-consumer/WeftKakaoConsumer.xcodeproj" ./gradlew :weft-map:kakaomap:integrateLinkagePackage`, commit the updated Xcode project, the generated `harness/fixtures/weft-kakaomap-ios-consumer/SwiftPM/` package, and `.swiftpm-locks/default/swiftImport/Package.resolved`, then verify `find harness/fixtures/weft-kakaomap-ios-consumer -name KakaoMapsSDKBundle.bundle -print -quit` returns a path.
+  - Kotlin 2.4 raises its default Apple minimum to iOS 15; set `-Xoverride-konan-properties=minVersion.ios=13.0` on the iOS binaries and verify each linked framework's `Info.plist` reports `MinimumOSVersion=13.0`.
+  - Run `XCODEPROJ_PATH="$PWD/harness/fixtures/weft-kakaomap-ios-consumer/WeftKakaoConsumer.xcodeproj" ./gradlew :weft-map:kakaomap:integrateLinkagePackage`, commit the updated Xcode project, the generated `harness/fixtures/weft-kakaomap-ios-consumer/KotlinMultiplatformLinkedPackage/` package, and `.swiftpm-locks/default/swiftImport/Package.resolved`. Kakao's vendor manifest copies `KakaoMapsSDKBundle.bundle/assets`; Xcode wraps these in `KakaoMapsSDK-SPM_KakaoMapsSDK-SPM.bundle`, so verify that generated resource bundle and its `assets/KakaoMapsSDKBundle.plist` inside the built app rather than searching for the original bundle directory.
 
-- [ ] **Step 4: Run iOS validation and verify GREEN where the environment supports it**
-  - Run: `./gradlew :weft-map:kakaomap:iosArm64Test`
+- [x] **Step 4: Run iOS validation and verify GREEN where the environment supports it**
+  - Run: `./gradlew :weft-map:kakaomap:iosSimulatorArm64Test` on Apple Silicon; Kotlin disables simulator runtime tests on `x86_64` hosts. The `iosArm64Test` shorthand is ambiguous in Kotlin 2.4.21, so do not use it.
   - Run: `./gradlew :weft-map:kakaomap:compileKotlinIosArm64 :weft-map:kakaomap:compileKotlinIosSimulatorArm64`
   - Run: `xcodebuild -project harness/fixtures/weft-kakaomap-ios-consumer/WeftKakaoConsumer.xcodeproj -scheme WeftKakaoConsumer -sdk iphonesimulator build`
-  - Run: `test -n "$(find harness/fixtures/weft-kakaomap-ios-consumer -name KakaoMapsSDKBundle.bundle -print -quit)"`
-  - Expected: fake-host tests, both generated imports, Xcode consumer build, and resource assertion pass; if the current host lacks macOS/Xcode, record that as an environment blocker rather than claiming iOS validation.
+  - Verify the built app contains `KakaoMapsSDK-SPM_KakaoMapsSDK-SPM.bundle/assets/KakaoMapsSDKBundle.plist` and its `Info.plist` reports iOS 13.0.
+  - Expected: fake-host tests, both generated imports, Xcode consumer build, and resource assertion pass where the host supports runtime execution; on `x86_64`, record simulator tests as skipped while still checking source compilation, framework link, and consumer build.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
   - `git add weft-map/kakaomap/build.gradle.kts weft-map/kakaomap/src/iosMain weft-map/kakaomap/src/iosTest harness/fixtures/weft-kakaomap-ios-consumer .swiftpm-locks`
   - `git commit -m "feat(kakaomap): add iOS SwiftPM adapter"`
 

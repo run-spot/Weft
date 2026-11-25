@@ -10,6 +10,11 @@ mavenPublishing {
 
 kotlin {
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        // Kotlin 2.4 raises its default Apple minimum to iOS 15; the public Kakao adapter
+        // contract and Kakao Maps SDK support iOS 13, so preserve that deployment floor.
+        target.binaries.configureEach {
+            freeCompilerArgs += "-Xoverride-konan-properties=minVersion.ios=13.0"
+        }
         target.binaries.framework {
             baseName = "WeftKakaoMap"
             isStatic = true
