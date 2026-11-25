@@ -41,7 +41,7 @@ Connect the common API with expect/actual or an injected platform provider when 
 
 ### Maven Central
 
-Publish each capability as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The initial `GROUP` is `run.thespot.weft`, with artifact IDs `weft-map`, `weft-login`, and `weft-push`. The `weft-bom` artifact aligns their versions, and releases are coordinated. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+Publish each capability as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The initial `GROUP` is `run.thespot.weft`, with artifact IDs `weft-core`, `weft-map`, `weft-login`, and `weft-push`. The `weft-bom` artifact aligns their versions, and releases are coordinated. `weft-core` carries the plugin installation contract shared by the capability artifacts; it contains no vendor or platform types. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
 
 The build conventions, module coordinates, metadata, signing hooks, and staged release workflow are described in [Bridge library modules](library-modules.md) and [Maven Central publishing](maven-central-publishing.md). Nothing has been published yet.
 

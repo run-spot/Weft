@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     constraints {
+        api(project(":weft-core"))
         api(project(":weft-map"))
         api(project(":weft-login"))
         api(project(":weft-push"))
