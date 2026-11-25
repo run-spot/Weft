@@ -16,7 +16,7 @@ tasks.register("verify") {
         "checkPomFileForIosSimulatorArm64Publication",
         "checkPomFileForIosX64Publication",
     )
-    listOf(":weft-map", ":weft-login", ":weft-push").forEach { libraryPath ->
+    listOf(":weft-core", ":weft-map", ":weft-login", ":weft-push").forEach { libraryPath ->
         kmpPublicationChecks.forEach { taskName ->
             dependsOn("$libraryPath:$taskName")
         }
@@ -63,7 +63,7 @@ tasks.register("verifyWeftBomPublication") {
                 directChildText(dependency, "version"),
             ).joinToString(":")
         }.toSet()
-        val expected = setOf("weft-map", "weft-login", "weft-push")
+        val expected = setOf("weft-core", "weft-map", "weft-login", "weft-push")
             .map { artifact -> "$expectedGroup:$artifact:$expectedVersion" }
             .toSet()
         check(actual == expected) {
@@ -76,6 +76,7 @@ tasks.register("publishWeftReleaseToMavenCentral") {
     group = "publishing"
     description = "Stages the Weft libraries and BOM together for a coordinated release."
     dependsOn(
+        ":weft-core:publishToMavenCentral",
         ":weft-map:publishToMavenCentral",
         ":weft-login:publishToMavenCentral",
         ":weft-push:publishToMavenCentral",

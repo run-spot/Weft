@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:weft-map`, `:weft-login`, and `:weft-push` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:weft-core` module provides the Ktor-style plugin installation contract that capability libraries and apps share. The `:weft-map`, `:weft-login`, and `:weft-push` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
 
 ## Start here
 
@@ -44,14 +44,29 @@ The scaffold records architecture choices and creates the planned module tree. E
 
 ## Build the bridge libraries
 
-The Gradle workspace includes Kotlin Multiplatform libraries for map, login, and push notifications, plus a Java Platform BOM that aligns their versions. Their initial artifact coordinates are:
+The Gradle workspace includes Kotlin Multiplatform libraries for the plugin core, map, login, and push notifications, plus a Java Platform BOM that aligns their versions. Their initial artifact coordinates are:
 
 ~~~text
+run.thespot.weft:weft-core:0.1.0-SNAPSHOT
 run.thespot.weft:weft-map:0.1.0-SNAPSHOT
 run.thespot.weft:weft-login:0.1.0-SNAPSHOT
 run.thespot.weft:weft-push:0.1.0-SNAPSHOT
 run.thespot.weft:weft-bom:0.1.0-SNAPSHOT
 ~~~
+
+Capabilities are installed in one place through `:weft-core`, and a capability family such as maps exposes one key so that its implementations are interchangeable:
+
+~~~kotlin
+val weft = Weft {
+    install(NaverMap) {
+        appKey = "naver-app-key"
+    }
+}
+
+val map = weft.plugin(MapCapabilityKey)
+~~~
+
+Installing a second plugin for the same capability key fails with `DuplicateWeftPluginException` instead of silently replacing the first.
 
 Consumers can import the BOM to use the coordinated version without repeating it:
 

@@ -1,13 +1,13 @@
 # Maven Central Publishing
 
-This repository prepares three Kotlin Multiplatform Maven Central publications and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
+This repository prepares four Kotlin Multiplatform Maven Central publications and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
 
 ## Build configuration
 
 - `build-logic` applies one KMP convention to each library and shared Maven publication metadata to all artifacts.
 - `GROUP` is `run.thespot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
-- The KMP modules publish `weft-map`, `weft-login`, and `weft-push`, with Android and iOS target publications.
-- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the three KMP artifacts to the same release version.
+- The KMP modules publish `weft-core`, `weft-map`, `weft-login`, and `weft-push`, with Android and iOS target publications.
+- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the four KMP artifacts to the same release version.
 - POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
 - `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
 
@@ -21,19 +21,21 @@ The checked-in developer email is a reserved `.invalid` address for local POM va
 
 ~~~bash
 ./gradlew verify
+./gradlew :weft-core:checkPomFileForKotlinMultiplatformPublication
 ./gradlew :weft-map:checkPomFileForKotlinMultiplatformPublication
 ./gradlew :weft-map:publishToMavenLocal
 ./gradlew :weft-bom:generatePomFileForMavenPublication
 ./gradlew :weft-bom:publishToMavenLocal
 ~~~
 
-Repeat the module-specific KMP POM and Maven Local checks for `:weft-login` and `:weft-push`. `publishToMavenLocal` is a local validation path and does not upload anything to Maven Central.
+Repeat the module-specific KMP POM and Maven Local checks for `:weft-map`, `:weft-login`, and `:weft-push`. `publishToMavenLocal` is a local validation path and does not upload anything to Maven Central.
 
 Gradle consumers import the BOM and omit the versions on selected artifacts:
 
 ~~~kotlin
 dependencies {
     implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
+    implementation("run.thespot.weft:weft-core")
     implementation("run.thespot.weft:weft-map")
     implementation("run.thespot.weft:weft-login")
 }
@@ -41,7 +43,7 @@ dependencies {
 
 ## Release workflow
 
-The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-map`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
+The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
 
 The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
 
