@@ -1,6 +1,7 @@
 # Weft Kakao Map Engine Design
 
-**Date:** 2026-11-25  
+**Date:** 2026-11-25
+
 **Status:** Scope approved; implementation follows this design after the final contract review
 
 ## Goal
