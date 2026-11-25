@@ -35,7 +35,9 @@ The API may preserve familiar Android behavior and results. Do not expose Contex
 
 ## SwiftPM import constraints
 
-As of 2026-11-24, Kotlin's official documentation labels SwiftPM dependency import into KMP modules as Alpha and instructs users to use KGP 2.5.0-RC. Weft's separate KMP/AGP 9+ baseline does not prove this feature works with its pinned KGP version. Treat bridge modules that require SwiftPM import as blocked until their exact KGP/Xcode tuple has a successful pilot. This path imports Clang/Objective-C APIs; do not assume all pure Swift APIs become visible to Kotlin. If a required SDK exposes only Swift APIs, create a minimal SwiftPM façade whose public API is Objective-C-compatible, then import that façade into the KMP bridge module. The façade adapts SDK calls only; app behavior remains in Kotlin.
+As of 2026-11-26, Kotlin's official documentation labels SwiftPM dependency import into KMP modules as Alpha and describes KGP 2.5.0-RC as the documented trial version. Weft has an observed pilot on its pinned KGP 2.4.21 / Gradle 9.7.0 / AGP 9.3.1 tuple, importing KakaoMapsSDK-SPM 2.12.19. The iOS device and simulator frameworks compiled and linked with a 13.0 deployment minimum; a fresh Xcode simulator consumer build included the SDK resource bundle and its `assets/KakaoMapsSDKBundle.plist`. This establishes local integration on that tuple, not general Kotlin support or release readiness. The test sources compile, but simulator runtime tests are not supported on this Intel host; a published remote Maven consumer and Apple Silicon runtime CI remain release gates.
+
+This path imports Clang/Objective-C APIs; do not assume all pure Swift APIs become visible to Kotlin. If a required SDK exposes only Swift APIs, create a minimal SwiftPM façade whose public API is Objective-C-compatible, then import that façade into the KMP bridge module. The façade adapts SDK calls only; app behavior remains in Kotlin.
 
 The Kotlin guide also warns that exporting a KMP module that uses SwiftPM import as a Swift package is not yet supported and may not work. An integration that works inside an app does not prove that the same module can be redistributed as a bridge library.
 
@@ -47,11 +49,11 @@ Before integrating an SDK, validate:
 4. The Kotlin adapter preserves cancellation, failure, empty-result, and main-thread behavior.
 5. Framework linking and archive builds work on the minimum supported Xcode.
 
-Keep the package dependency and its `Package.resolved` lock data with the KMP bridge source. The consuming application depends on the approved Weft bridge artifact, not directly on the vendor SDK package. For Gradle/KMP consumers, verify that the selected Kotlin Gradle Plugin propagates and resolves the bridge's transitive SwiftPM dependency when linking the consumer's native framework.
+Keep the package dependency, `.swiftpm-locks/default/swiftImport/Package.resolved`, and generated linkage package with the KMP bridge source. Kakao's package contains SDK assets; verify the generated `KakaoMapsSDK-SPM_KakaoMapsSDK-SPM.bundle/assets/KakaoMapsSDKBundle.plist` in the built app. The consuming application depends on the approved Weft bridge artifact, not directly on the vendor SDK package. For Gradle/KMP consumers, verify that the selected Kotlin Gradle Plugin propagates and resolves the bridge's transitive SwiftPM dependency when linking the consumer's native framework.
 
 ## Maven Central and SwiftPM
 
-Publish the Kotlin bridge library to Maven Central as a Weft KMP artifact for Android and KMP Gradle consumers. This Maven artifact does not embed the Swift package source. The official Kotlin guide says the Gradle plugin supplies native machine code for transitive SwiftPM dependencies, but this integration remains Alpha; verify that behavior with the exact KGP version, remote publication, consumer build, and lock-file setup before release.
+Publish the Kotlin bridge library to Maven Central as a Weft KMP artifact for Android and KMP Gradle consumers. This Maven artifact does not embed the Swift package source. The official Kotlin guide says the Gradle plugin supplies native machine code for transitive SwiftPM dependencies, but this integration remains Alpha; verify that behavior with the exact KGP version, remote publication, consumer build, and lock-file setup before release. The Kakao pilot's local Xcode fixture does not substitute for a remote Maven consumer.
 
 SwiftPM consumers need a separate Swift package distribution. A common binary flow publishes an XCFramework ZIP, a Package.swift binary target, checksum, and version tag. Therefore a future bridge library may use one source repository but still needs separate Maven Central and SwiftPM release artifacts.
 

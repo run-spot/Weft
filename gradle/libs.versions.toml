@@ -10,3 +10,7 @@ android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref
 vanniktech-gradle-publish-plugin = { module = "com.vanniktech.maven.publish:com.vanniktech.maven.publish.gradle.plugin", version.ref = "maven-publish" }
 kotlin-compose-compiler-plugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-runtime" }
+compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-runtime" }
+compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-runtime" }
+kakao-maps-android = { module = "com.kakao.maps.open:android", version = "2.15.2" }
+lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version = "2.10.0-alpha05" }

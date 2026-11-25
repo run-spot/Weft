@@ -48,7 +48,7 @@ The script checks profile manifests, required docs, skill frontmatter, Markdown 
 ## Gradle libraries and release safety
 
 - `build-logic` owns shared KMP and Maven Central conventions; read its nearest `AGENTS.md` before changing conventions.
-- `weft-core`, `weft-map`, `weft-login`, and `weft-push` are KMP publication units with independent API milestones; `weft-bom` aligns their released versions.
+- `weft-core`, `weft-map:kakaomap`, `weft-login`, and `weft-push` are KMP publication units with independent API milestones; `weft-map` itself is a namespace project, and `weft-bom` aligns the four published artifacts.
 - Keep credentials and signing keys out of tracked files. Configure them as Gradle properties or GitHub Actions secrets.
 - Do not run a Maven Central publication task unless the maintainer explicitly requests a release. Published Central coordinates are immutable.
 
@@ -56,7 +56,7 @@ The script checks profile manifests, required docs, skill frontmatter, Markdown 
 
 - `build-logic`: shared KMP target, toolchain, POM, signing, Compose compiler, and JVM plugin conventions.
 - `:weft-core`: plugin installation contract (`Weft`, `WeftConfig`, `WeftPlugin`, `Weft.get`), the Compose entry point (`LocalWeft`, `WeftApp`), and the health-check contract (`WeftHealthCheck`, `Weft.healthChecks`); no vendor or platform types.
-- `:weft-map`, `:weft-login`, and `:weft-push`: capability libraries with independent API milestone checklists.
+- `:weft-map`: namespace project only; `:weft-map:kakaomap`, `:weft-login`, and `:weft-push` are capability-library publication leaves with independent API milestone checklists.
 - `:weft-gradle-plugin`: `verifyWeftPlugins` (offline plugin, credential literal, and client-secret check, part of `check`), `verifyWeftDependencies` (declared-dependency allowlist, opt-in for `check`), and `verifyWeftHealth` (aggregated credentialed probes, run on request).
-- `:weft-bom`: metadata-only Java Platform that publishes version constraints for the four libraries.
+- `:weft-bom`: metadata-only Java Platform that publishes version constraints for `:weft-core`, `:weft-map:kakaomap`, `:weft-login`, and `:weft-push`.
 - The KMP modules share build conventions. Keep the BOM as version metadata; do not add library-to-library dependencies without a real public API need.

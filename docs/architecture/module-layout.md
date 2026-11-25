@@ -33,6 +33,24 @@ shared/
 
 For AGP 9+, do not apply the Android application plugin and KMP Android library configuration to the same module. Use com.android.kotlin.multiplatform.library for a KMP Android target such as composeApp, and keep androidApp as a separate com.android.application module. The default Weft profile places the app entry Activity and manifest in the Android shell. If an existing project places them in the KMP library's Android source set, validate manifest merging and install/build behavior in CI and record the decision.
 
+## Weft bridge-library workspace example
+
+The repository's reusable bridge libraries are split by published capability, with provider leaves nested below a namespace when multiple providers may exist:
+
+~~~text
+weft-core/                  # provider-neutral contracts and Compose APIs
+weft-map/                   # Gradle namespace only; no artifact of its own
+  kakaomap/                 # :weft-map:kakaomap -> weft-kakaomap
+    src/commonMain/         # Kakao configuration and common binding
+    src/androidMain/        # Kakao Android SDK adapter
+    src/iosMain/            # Kakao SwiftPM import and Kotlin/Native adapter
+weft-login/                 # separate capability leaf
+weft-push/                  # separate capability leaf
+weft-bom/                   # version constraints for published leaves
+~~~
+
+The namespace parent keeps provider-specific dependencies and release boundaries in independent leaf modules. `:weft-core` owns shared map models and Compose content; native SDK types remain in their platform source sets. The Kakao leaf's Android consumer must configure Kakao's Maven repository, while its iOS build uses the locked SwiftPM dependency.
+
 ## Supabase backend boundary
 
 Both UI-sharing profiles can use Supabase. Keep its deployment configuration outside Gradle application modules:

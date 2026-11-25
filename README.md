@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a separate KMP bridge-library workspace. The `:weft-core` module provides the Ktor-style plugin installation contract that capability libraries and apps share, plus the Compose entry point (`LocalWeft`, `WeftApp`) and the health-check contract that capability libraries use to describe their credential probes. `:weft-gradle-plugin` checks app wiring offline and runs those probes on request. The `:weft-map`, `:weft-login`, and `:weft-push` modules currently provide build and publication scaffolding; their provider APIs and adapters are later milestones.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. Login and push remain build/publication scaffolding. These libraries are not yet published.
 
 ## Start here
 
@@ -48,7 +48,7 @@ The Gradle workspace includes Kotlin Multiplatform libraries for the plugin core
 
 ~~~text
 run.thespot.weft:weft-core:0.1.0-SNAPSHOT
-run.thespot.weft:weft-map:0.1.0-SNAPSHOT
+run.thespot.weft:weft-kakaomap:0.1.0-SNAPSHOT
 run.thespot.weft:weft-login:0.1.0-SNAPSHOT
 run.thespot.weft:weft-push:0.1.0-SNAPSHOT
 run.thespot.weft:weft-bom:0.1.0-SNAPSHOT
@@ -58,12 +58,12 @@ Capabilities are installed in one place through `:weft-core`, and a capability f
 
 ~~~kotlin
 val weft = Weft {
-    install(NaverMap) {
-        appKey = "naver-app-key"
+    install(KakaoMap) {
+        nativeAppKey = "kakao-native-app-key"
     }
 }
 
-val map = weft.get<MapPlugin>()
+val mapPlugin = weft.get<MapPlugin>()
 ~~~
 
 Every map provider declares `type = MapPlugin::class`, so `weft.get<MapPlugin>()` returns whichever implementation was installed. Installing a second plugin for the same plugin type fails with `DuplicateWeftPluginException` instead of silently replacing the first.
@@ -80,6 +80,16 @@ setContent {
 ~~~
 
 Reading `LocalWeft` outside `WeftApp` fails during composition with a message that names the wrapper, and a preview or UI test provides a fake runtime the same way.
+
+`WeftMap` delegates to the installed provider. Its child content is provider-neutral and keyed by marker ID:
+
+~~~kotlin
+WeftApp(weft) {
+    WeftMap(WeftMapState(CameraPosition(LatLng(37.5665, 126.9780)))) {
+        Marker(MapMarker(id = "seoul-city-hall", position = LatLng(37.5665, 126.9780)))
+    }
+}
+~~~
 
 ## Verify plugin wiring
 
@@ -124,20 +134,33 @@ Consumers can import the BOM to use the coordinated version without repeating it
 ~~~kotlin
 dependencies {
     implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
-    implementation("run.thespot.weft:weft-map")
+    implementation("run.thespot.weft:weft-kakaomap")
 }
 ~~~
 
-The `run.thespot` Central namespace must be verified before the first release. The current modules contain publication and target configuration only; do not release them until the module milestones in their `AGENTS.md` files are complete.
+The Kakao Android SDK is resolved from Kakao's Maven repository. Add it to the consumer's dependency repositories alongside Google and Maven Central:
+
+~~~kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://devrepo.kakao.com/nexus/repository/kakaomap-releases/")
+    }
+}
+~~~
+
+The `run.thespot` Central namespace must be verified before the first release. The map API and platform adapters are implemented, but the bridge baseline remains a candidate until CI and a published consumer validate the full target set. See the module instructions and [toolchain policy](docs/architecture/toolchain-policy.md).
 
 ~~~bash
 ./gradlew projects
 ./gradlew verify
-./gradlew :weft-map:publishToMavenLocal
+./gradlew :weft-core:publishToMavenLocal
+./gradlew :weft-map:kakaomap:publishToMavenLocal
 ./gradlew :weft-bom:publishToMavenLocal
 ~~~
 
-See [Maven Central publishing](docs/architecture/maven-central-publishing.md) for credentials, signing, and the release workflow. Maven Central KMP publications include target artifacts for Gradle consumers; SwiftPM XCFramework distribution is a separate milestone.
+See [Maven Central publishing](docs/architecture/maven-central-publishing.md) for the local consumer fixture, credentials, signing, and the release workflow. The iOS provider currently imports the Kakao SDK through Kotlin's SwiftPM integration; publishing a native SwiftPM XCFramework for direct Swift consumers is a separate distribution path.
 
 ## Skills
 
