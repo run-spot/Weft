@@ -206,6 +206,32 @@ class KakaoMapAndroidCoordinatorTest {
     }
 
     @Test
+    fun retriesLastSuccessfulCameraAfterCameraMutationAndRollbackBothFail() {
+        val host = FakeKakaoMapAndroidHost()
+        val cameraA = state(zoom = 12f, bearing = 20f)
+        val cameraB = state(zoom = 8f, bearing = 80f)
+        val markers = content(marker("one"))
+        val coordinator = coordinator(host, initialState = cameraA, initialContent = markers)
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        host.failNextCameraMutationAfterApply = true
+        host.failNextCameraRestore = true
+
+        coordinator.update(cameraB, markers, onError = null)
+
+        assertEquals(cameraB.cameraPosition, host.nativeCamera)
+
+        coordinator.update(cameraA, markers, onError = null)
+
+        assertEquals(cameraA.cameraPosition, host.nativeCamera)
+        assertEquals(
+            listOf(cameraA.cameraPosition, cameraB.cameraPosition, cameraA.cameraPosition),
+            host.cameraUpdates,
+        )
+    }
+
+    @Test
     fun markerReconciliationAddsUpdatesAndRemovesByStableId() {
         val layer = FakeTransactionalMarkerLayer()
         val reconciler = KakaoMapAndroidMarkerReconciler(layer)
@@ -560,6 +586,8 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
     private val markerReconciler = KakaoMapAndroidMarkerReconciler(markerLayer)
     var initializeSdk: (String) -> Unit = {}
     var failNextRender: Boolean = false
+    var failNextCameraMutationAfterApply: Boolean = false
+    var failNextCameraRestore: Boolean = false
     var failAfterMutatingMarkerAddId: String? = null
     var lastReportedError: Throwable? = null
         private set
@@ -584,7 +612,11 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
         }
     }
 
-    override fun render(camera: CameraPosition?, content: MapContent) {
+    override fun render(
+        camera: CameraPosition?,
+        content: MapContent,
+        onCameraUpdateAttempted: () -> Unit,
+    ) {
         markerLayer.failAfterMutatingAddId = failAfterMutatingMarkerAddId
         failAfterMutatingMarkerAddId = null
         if (camera == null) {
@@ -598,11 +630,22 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
                         failNextRender = false
                         throw IllegalArgumentException("camera render failed")
                     }
+                    onCameraUpdateAttempted()
                     nativeCamera = camera
+                    cameraUpdates += camera
+                    if (failNextCameraMutationAfterApply) {
+                        failNextCameraMutationAfterApply = false
+                        throw IllegalStateException("native camera mutation failed")
+                    }
                 },
-                restoreCamera = { nativeCamera = previousCamera },
+                restoreCamera = {
+                    if (failNextCameraRestore) {
+                        failNextCameraRestore = false
+                        throw IllegalArgumentException("native camera restore failed")
+                    }
+                    nativeCamera = previousCamera
+                },
             )
-            cameraUpdates += camera
         }
         renders += RenderedMap(checkNotNull(nativeCamera), content)
     }

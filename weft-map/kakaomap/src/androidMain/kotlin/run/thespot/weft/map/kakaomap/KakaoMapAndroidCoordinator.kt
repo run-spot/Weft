@@ -26,7 +26,11 @@ internal interface KakaoMapAndroidHost {
     )
 
     /** A null camera means update children without resetting the native camera. */
-    fun render(camera: CameraPosition?, content: MapContent)
+    fun render(
+        camera: CameraPosition?,
+        content: MapContent,
+        onCameraUpdateAttempted: () -> Unit,
+    )
 
     fun resume()
 
@@ -65,6 +69,7 @@ internal class KakaoMapAndroidCoordinator(
     private var errorReported = false
     private var zoomBounds: KakaoMapZoomBounds? = null
     private var nativeStateMayBeOutOfSync = false
+    private var cameraMayBeOutOfSync = false
     private var camera: CameraPosition = initialState.cameraPosition
     private var content: MapContent = initialContent
     @Volatile
@@ -204,14 +209,23 @@ internal class KakaoMapAndroidCoordinator(
             return
         }
 
-        val cameraToApply = normalizedCamera.takeIf { it != lastRenderedCamera }
+        val cameraToApply = normalizedCamera.takeIf {
+            it != lastRenderedCamera || cameraMayBeOutOfSync
+        }
+        var cameraUpdateAttempted = false
         try {
-            host.render(cameraToApply, content)
-            if (cameraToApply != null) lastRenderedCamera = cameraToApply
+            host.render(cameraToApply, content) {
+                cameraUpdateAttempted = true
+            }
+            if (cameraToApply != null) {
+                lastRenderedCamera = cameraToApply
+                cameraMayBeOutOfSync = false
+            }
             lastRenderedMarkers = markers
             nativeStateMayBeOutOfSync = false
         } catch (throwable: Throwable) {
             nativeStateMayBeOutOfSync = true
+            if (cameraUpdateAttempted) cameraMayBeOutOfSync = true
             reportError(throwable, callbackGeneration)
         }
     }

@@ -69,7 +69,11 @@ internal class KakaoMapAndroidMapViewHost(
         )
     }
 
-    override fun render(camera: CameraPosition?, content: MapContent) {
+    override fun render(
+        camera: CameraPosition?,
+        content: MapContent,
+        onCameraUpdateAttempted: () -> Unit,
+    ) {
         val readyMap = checkNotNull(kakaoMap) { "KakaoMap is not ready." }
         val reconciler = markerReconciler ?: createMarkerReconciler(readyMap).also {
             markerReconciler = it
@@ -93,7 +97,9 @@ internal class KakaoMapAndroidMapViewHost(
         reconciler.renderWithCamera(
             content = content,
             applyCamera = {
-                readyMap.moveCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
+                val cameraUpdate = CameraUpdateFactory.newCameraPosition(cameraPosition)
+                onCameraUpdateAttempted()
+                readyMap.moveCamera(cameraUpdate)
             },
             restoreCamera = {
                 readyMap.moveCamera(CameraUpdateFactory.newCameraPosition(previousNativeCamera))
