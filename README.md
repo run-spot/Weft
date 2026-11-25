@@ -54,7 +54,7 @@ run.thespot.weft:weft-push:0.1.0-SNAPSHOT
 run.thespot.weft:weft-bom:0.1.0-SNAPSHOT
 ~~~
 
-Capabilities are installed in one place through `:weft-core`, and a capability family such as maps exposes one key so that its implementations are interchangeable:
+Capabilities are installed in one place through `:weft-core`, and a capability family such as maps exposes one plugin type so that its implementations are interchangeable:
 
 ~~~kotlin
 val weft = Weft {
@@ -63,10 +63,10 @@ val weft = Weft {
     }
 }
 
-val map = weft.plugin(MapCapabilityKey)
+val map = weft.get<MapPlugin>()
 ~~~
 
-Installing a second plugin for the same capability key fails with `DuplicateWeftPluginException` instead of silently replacing the first.
+Every map provider declares `type = MapPlugin::class`, so `weft.get<MapPlugin>()` returns whichever implementation was installed. Installing a second plugin for the same plugin type fails with `DuplicateWeftPluginException` instead of silently replacing the first.
 
 Consumers can import the BOM to use the coordinated version without repeating it:
 

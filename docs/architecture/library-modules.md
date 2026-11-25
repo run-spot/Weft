@@ -6,7 +6,7 @@ The bridge-library workspace is a multi-project Gradle build inside the Weft rep
 
 | Gradle path | Artifact ID | Responsibility | Current milestone |
 | --- | --- | --- | --- |
-| `:weft-core` | `weft-core` | Plugin installation container (`Weft`, `WeftConfig`, `WeftPlugin`, `WeftPluginKey`) | M1: plugin installation core |
+| `:weft-core` | `weft-core` | Plugin installation container (`Weft`, `WeftConfig`, `WeftPlugin`, `Weft.get`) | M1: plugin installation core |
 | `:weft-map` | `weft-map` | Map capability contracts and platform adapters | M0: build and publication skeleton |
 | `:weft-login` | `weft-login` | Cross-platform sign-in capability | M0: build and publication skeleton |
 | `:weft-push` | `weft-push` | Push registration and notification capability | M0: build and publication skeleton |
@@ -32,14 +32,14 @@ val weft = Weft {
     }
 }
 
-val map = weft.plugin(MapCapabilityKey)
+val map = weft.get<MapPlugin>()
 ~~~
 
-Each plugin declares a `WeftPluginKey`, and a capability family publishes one key that all of its implementations use (for example `weft.map` for Naver, Kakao, and Google map plugins). Consumers and views resolve the active implementation through that capability key, so switching providers is an installation change rather than a UI change.
+Each plugin declares the `KClass` it installs under, and a capability family publishes one interface that all of its implementations use (for example `MapPlugin` for Naver, Kakao, and Google map plugins, declared as `override val type: KClass<MapPlugin> = MapPlugin::class`). Consumers and views resolve the active implementation through `weft.get<MapPlugin>()`, so switching providers is an installation change rather than a UI change.
 
-Because the key identifies the slot, only one plugin per key may be installed; a second installation throws `DuplicateWeftPluginException` naming the key and both plugin names. Resolution through `plugin(key)` throws `MissingWeftPluginException` when no plugin is installed, while `pluginOrNull(key)` returns `null` for optional capabilities. Plugin `install` hooks run once after every registration is prepared, so a plugin may resolve peer plugins from the completed `Weft` scope.
+Because the plugin type identifies the slot, only one plugin per type may be installed; a second installation throws `DuplicateWeftPluginException` naming the type and both plugin names. Resolution through `get<T>()` (or `get(KClass)`) throws `MissingWeftPluginException` when no plugin is installed, while `getOrNull<T>()` returns `null` for optional capabilities. Plugin `install` hooks run once after every registration is prepared, so a plugin may resolve peer plugins from the completed `Weft` scope.
 
-`:weft-core` holds no vendor or platform types. Capability modules add their keys, configuration, and adapters on top of it and keep Android and Apple SDK types in their platform source sets.
+`:weft-core` holds no vendor or platform types. Capability modules add their plugin types, configuration, and adapters on top of it and keep Android and Apple SDK types in their platform source sets.
 
 ## Source ownership
 

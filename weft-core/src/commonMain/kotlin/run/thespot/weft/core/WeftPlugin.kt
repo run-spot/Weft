@@ -1,5 +1,7 @@
 package run.thespot.weft.core
 
+import kotlin.reflect.KClass
+
 /**
  * A Weft capability that can be installed into a [Weft] instance.
  *
@@ -9,21 +11,26 @@ package run.thespot.weft.core
  *    configuration type, creates its default configuration, and validates it here.
  * 2. [install] binds the prepared instance into the running [scope]. The hook runs after every
  *    registered plugin has been prepared, so it may resolve other installed plugins through
- *    [Weft.plugin] or [Weft.pluginOrNull]. This is where a plugin publishes itself as the active
+ *    [Weft.get] or [Weft.getOrNull]. This is where a plugin publishes itself as the active
  *    implementation of its capability.
  *
- * A plugin declares the [key] it installs under. Implementations in the same capability family
- * share one key, which makes them mutually exclusive: installing a second plugin for the same key
- * fails with [DuplicateWeftPluginException].
+ * A plugin declares the [type] it installs under. Implementations in the same capability family
+ * declare the same type, which makes them mutually exclusive: installing a second plugin for the
+ * same type fails with [DuplicateWeftPluginException].
  *
  * @param TConfig type of the plugin configuration.
  * @param TPlugin type of the prepared plugin instance stored in the [Weft] registry.
  */
 public interface WeftPlugin<TConfig : Any, TPlugin : Any> {
     /**
-     * Key this plugin installs under, normally the key of its capability family.
+     * Type this plugin installs under, normally the capability interface shared by every
+     * implementation of that capability.
+     *
+     * Declare the shared interface rather than the provider class, for example
+     * `override val type: KClass<MapPlugin> = MapPlugin::class`, so that consumers resolve the
+     * capability with `weft.get<MapPlugin>()` whichever provider was installed.
      */
-    public val key: WeftPluginKey<TPlugin>
+    public val type: KClass<TPlugin>
 
     /**
      * Human-readable plugin name used in diagnostics and duplicate-installation errors.

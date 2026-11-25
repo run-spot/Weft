@@ -1,5 +1,7 @@
 package run.thespot.weft.core
 
+import kotlin.reflect.KClass
+
 /**
  * Collects plugin installations and produces a configured [Weft] instance.
  *
@@ -14,6 +16,8 @@ package run.thespot.weft.core
  *         redirectUri = "app://callback"
  *     }
  * }
+ *
+ * val map = weft.get<MapPlugin>()
  * ```
  *
  * Registration is declarative: [install] applies the configuration block immediately and records
@@ -24,21 +28,21 @@ public class WeftConfig internal constructor() {
     private val pendingInstalls: MutableList<PendingInstall> = mutableListOf()
 
     /**
-     * Registers [plugin] under its [key][WeftPlugin.key] and applies [configure] to its
+     * Registers [plugin] under its [type][WeftPlugin.type] and applies [configure] to its
      * configuration.
      *
      * @throws DuplicateWeftPluginException when an earlier plugin in this configuration already
-     * occupies the same key. Plugins that belong to one capability family share a key, so only one
-     * implementation of a capability can be installed.
+     * occupies the same plugin type. Plugins that belong to one capability family declare the same
+     * plugin type, so only one implementation of a capability can be installed.
      */
     public fun <TConfig : Any, TPlugin : Any> install(
         plugin: WeftPlugin<TConfig, TPlugin>,
         configure: TConfig.() -> Unit = {},
     ) {
-        val existing = pendingInstalls.firstOrNull { it.key == plugin.key }
+        val existing = pendingInstalls.firstOrNull { it.type == plugin.type }
         if (existing != null) {
             throw DuplicateWeftPluginException(
-                key = plugin.key,
+                type = plugin.type,
                 existingPluginName = existing.pluginName,
                 newPluginName = plugin.pluginName,
             )
@@ -46,7 +50,7 @@ public class WeftConfig internal constructor() {
 
         val instance = plugin.prepare(configure)
         pendingInstalls += PendingInstall(
-            key = plugin.key,
+            type = plugin.type,
             pluginName = plugin.pluginName,
             instance = instance,
             install = { weft -> plugin.install(instance, weft) },
@@ -56,7 +60,7 @@ public class WeftConfig internal constructor() {
     internal fun createWeft(): Weft {
         val weft = Weft(
             installedPlugins = pendingInstalls.associate { pending ->
-                pending.key to InstalledPlugin(pending.instance)
+                pending.type to InstalledPlugin(pending.instance)
             },
         )
         pendingInstalls.forEach { it.install(weft) }
@@ -75,42 +79,40 @@ public fun Weft(block: WeftConfig.() -> Unit): Weft = WeftConfig().apply(block).
 /**
  * Runtime registry of installed Weft plugins.
  *
- * Plugins are stored under their [WeftPluginKey]. Consumers resolve the active implementation of a
- * capability with the capability key, which keeps a view independent of the concrete provider that
- * was installed.
+ * Plugins are stored under their [plugin type][WeftPlugin.type]. Consumers resolve the active
+ * implementation of a capability with that type, which keeps a view independent of the concrete
+ * provider that was installed.
  */
 public class Weft internal constructor(
-    private val installedPlugins: Map<WeftPluginKey<*>, InstalledPlugin>,
+    private val installedPlugins: Map<KClass<*>, InstalledPlugin>,
 ) {
     /**
-     * Returns the plugin installed for [key].
+     * Returns the plugin installed for [TPlugin], normally a capability interface such as
+     * `MapPlugin`.
      *
-     * @throws MissingWeftPluginException when nothing is installed for [key].
+     * @throws MissingWeftPluginException when nothing is installed for [TPlugin].
      */
-    public fun <TPlugin : Any> plugin(key: WeftPluginKey<TPlugin>): TPlugin =
-        pluginOrNull(key) ?: throw MissingWeftPluginException(key)
+    public inline fun <reified TPlugin : Any> get(): TPlugin = get(TPlugin::class)
 
     /**
-     * Returns the plugin installed for [key], or `null` when nothing is installed for it.
+     * Returns the plugin installed for [type].
+     *
+     * @throws MissingWeftPluginException when nothing is installed for [type].
+     */
+    public fun <TPlugin : Any> get(type: KClass<TPlugin>): TPlugin =
+        getOrNull(type) ?: throw MissingWeftPluginException(type)
+
+    /**
+     * Returns the plugin installed for [TPlugin], or `null` when nothing is installed for it.
+     */
+    public inline fun <reified TPlugin : Any> getOrNull(): TPlugin? = getOrNull(TPlugin::class)
+
+    /**
+     * Returns the plugin installed for [type], or `null` when nothing is installed for it.
      */
     @Suppress("UNCHECKED_CAST")
-    public fun <TPlugin : Any> pluginOrNull(key: WeftPluginKey<TPlugin>): TPlugin? =
-        installedPlugins[key]?.instance as TPlugin?
-
-    /**
-     * Returns the instance installed for [plugin]'s key.
-     *
-     * @throws MissingWeftPluginException when [plugin] is not installed.
-     */
-    public fun <TConfig : Any, TPlugin : Any> plugin(plugin: WeftPlugin<TConfig, TPlugin>): TPlugin =
-        plugin(plugin.key)
-
-    /**
-     * Returns the instance installed for [plugin]'s key, or `null` when [plugin] is not installed.
-     */
-    public fun <TConfig : Any, TPlugin : Any> pluginOrNull(
-        plugin: WeftPlugin<TConfig, TPlugin>,
-    ): TPlugin? = pluginOrNull(plugin.key)
+    public fun <TPlugin : Any> getOrNull(type: KClass<TPlugin>): TPlugin? =
+        installedPlugins[type]?.instance as TPlugin?
 }
 
 internal class InstalledPlugin(
@@ -118,7 +120,7 @@ internal class InstalledPlugin(
 )
 
 private class PendingInstall(
-    val key: WeftPluginKey<*>,
+    val type: KClass<*>,
     val pluginName: String,
     val instance: Any,
     val install: (Weft) -> Unit,
