@@ -434,6 +434,70 @@ class KakaoMapAndroidCoordinatorTest {
         assertNull(host.lastReportedError)
     }
 
+    @Test
+    fun identicalLastValidUpdateRetriesWhenFailedRenderLeftNativeStateUncertain() {
+        val host = FakeKakaoMapAndroidHost()
+        val committedMarker = marker("valid", title = "committed")
+        val lastValidContent = content(committedMarker)
+        val coordinator = coordinator(
+            host = host,
+            initialState = state(),
+            initialContent = lastValidContent,
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        val rollbackFailure = IllegalArgumentException("partial native restore failed")
+        host.markerLayer.failRestoreWith = rollbackFailure
+        host.failAfterMutatingMarkerAddId = "failed"
+
+        coordinator.update(
+            state = state(zoom = 10f),
+            content = content(committedMarker.copy(title = "partial"), marker("failed")),
+            onError = null,
+        )
+        assertEquals(1, host.renders.size)
+        assertTrue(host.markerLayer.markers.isEmpty())
+
+        coordinator.update(state(), lastValidContent, onError = null)
+
+        assertEquals(2, host.renders.size)
+        assertEquals(listOf(committedMarker), host.markerLayer.markers.values.toList())
+        assertEquals(listOf("valid"), host.renders.last().content.markers.map(MapMarker::id))
+    }
+
+    @Test
+    fun lifecycleResumeRetriesLastValidSnapshotWhenNativeStateIsUncertain() {
+        val host = FakeKakaoMapAndroidHost()
+        val committedMarker = marker("valid", title = "committed")
+        val lastValidContent = content(committedMarker)
+        val coordinator = coordinator(
+            host = host,
+            initialState = state(),
+            initialContent = lastValidContent,
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        host.markerLayer.failRestoreWith = IllegalArgumentException("partial native restore failed")
+        host.failAfterMutatingMarkerAddId = "failed"
+
+        coordinator.update(
+            state = state(zoom = 10f),
+            content = content(committedMarker.copy(title = "partial"), marker("failed")),
+            onError = null,
+        )
+        coordinator.onPause()
+        coordinator.update(state(), lastValidContent, onError = null)
+        assertEquals(1, host.renders.size)
+        assertTrue(host.markerLayer.markers.isEmpty())
+
+        coordinator.onResume()
+
+        assertEquals(2, host.renders.size)
+        assertEquals(listOf(committedMarker), host.markerLayer.markers.values.toList())
+    }
+
     private fun coordinator(
         host: FakeKakaoMapAndroidHost,
         appKey: String = "test-app-key",
@@ -491,6 +555,7 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
 
     override fun render(camera: CameraPosition, content: MapContent) {
         markerLayer.failAfterMutatingAddId = failAfterMutatingMarkerAddId
+        failAfterMutatingMarkerAddId = null
         markerReconciler.renderWithCamera(
             content = content,
             applyCamera = {

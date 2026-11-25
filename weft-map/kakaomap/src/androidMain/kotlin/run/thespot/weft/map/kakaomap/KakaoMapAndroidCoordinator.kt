@@ -63,6 +63,7 @@ internal class KakaoMapAndroidCoordinator(
     private val errorLock = Any()
     private var errorReported = false
     private var zoomBounds: KakaoMapZoomBounds? = null
+    private var nativeStateMayBeOutOfSync = false
     private var camera: CameraPosition = initialState.cameraPosition
     private var content: MapContent = initialContent
     @Volatile
@@ -165,7 +166,10 @@ internal class KakaoMapAndroidCoordinator(
                 } else {
                     KakaoMapAndroidCoordinatorState.Started
                 }
-                renderIfReady(force = false, callbackGeneration = generation)
+                renderIfReady(
+                    force = nativeStateMayBeOutOfSync,
+                    callbackGeneration = generation,
+                )
             } catch (throwable: Throwable) {
                 reportError(throwable, generation)
             }
@@ -190,13 +194,22 @@ internal class KakaoMapAndroidCoordinator(
         val bounds = zoomBounds ?: return
         val normalizedCamera = camera.normalizeFor(bounds)
         val markers = content.markers
-        if (!force && normalizedCamera == lastRenderedCamera && markers == lastRenderedMarkers) return
+        if (
+            !force &&
+            !nativeStateMayBeOutOfSync &&
+            normalizedCamera == lastRenderedCamera &&
+            markers == lastRenderedMarkers
+        ) {
+            return
+        }
 
         try {
             host.render(normalizedCamera, content)
             lastRenderedCamera = normalizedCamera
             lastRenderedMarkers = markers
+            nativeStateMayBeOutOfSync = false
         } catch (throwable: Throwable) {
+            nativeStateMayBeOutOfSync = true
             reportError(throwable, callbackGeneration)
         }
     }
