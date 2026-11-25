@@ -493,13 +493,18 @@ internal interface KakaoMapIosHost {
     fun prepare(
         appKey: String,
         initialCamera: CameraPosition,
-        onReady: (KakaoMapZoomBounds) -> Unit,
+        onReady: (KakaoMapIosZoomBounds) -> Unit,
         onError: (Throwable) -> Unit,
     )
     fun render(camera: CameraPosition, content: MapContent)
     fun pause()
     fun reset()
 }
+
+internal data class KakaoMapIosZoomBounds(
+    val min: Int,
+    val max: Int,
+)
 ```
 
 `KakaoMapIosNativeHost` adapts `KMController`; `FakeKakaoMapIosHost` records prepare/render/pause/
