@@ -109,10 +109,12 @@ public data class WeftMapState(
     public val cameraPosition: CameraPosition,
 )
 
-@Immutable
-public data class MapContent(
-    public val markers: List<MapMarker> = emptyList(),
-)
+public class MapContent internal constructor(
+    markers: List<MapMarker>,
+) {
+    /** Defensive copy of the marker snapshot produced by the child composition. */
+    public val markers: List<MapMarker> = markers.toList()
+}
 
 @Composable
 public fun WeftMap(
@@ -121,7 +123,14 @@ public fun WeftMap(
     content: @Composable MapScope.() -> Unit = {},
     onError: ((Throwable) -> Unit)? = null,
 ) {
-    LocalWeft.current.get<MapPlugin>().Content(state, modifier, content, onError)
+    Box(modifier) {
+        LocalWeft.current.get<MapPlugin>().Content(
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+            content = content,
+            onError = onError,
+        )
+    }
 }
 
 @Composable
@@ -142,6 +151,10 @@ provider-neutral; callbacks, mutable camera state, overlays, and location tracki
 only when a second consumer proves their shape. `onError` is the one lifecycle escape hatch: a
 provider reports native initialization or rendering failures through it and ignores callbacks after
 its surface is disposed.
+
+The `Box`/`fillMaxSize` host is why `:weft-core` exposes Compose Foundation in addition to the
+Compose UI types used by `Modifier`; provider surfaces receive a normalized full-size modifier while
+the caller's outer modifier controls placement, size, and clipping.
 
 `MapContent` preserves Compose child order. Marker IDs must be unique within one content snapshot;
 the builder throws `IllegalArgumentException` with the duplicate IDs before the snapshot is
@@ -187,6 +200,112 @@ Node lifecycle rules:
 - `MapMarkerNode.updateMarker` replaces the immutable model in place and invalidates once when the
   model changes.
 - A disposed child composition ignores late invalidations and does not publish another snapshot.
+
+Snapshot implementation contract:
+
+```kotlin
+@Composable
+public fun rememberMapContent(
+    content: @Composable MapScope.() -> Unit,
+): MapContent {
+    val parentComposition = rememberCompositionContext()
+    val currentContent = remember {
+        mutableStateOf(content, policy = neverEqualPolicy())
+    }
+    val root = remember { MapRootNode() }
+    val state = remember(root) { MapContentState(root) }
+    val applier = remember(root) { MapApplier(root) { state.invalidate() } }
+    val composition = remember(parentComposition, applier) {
+        Composition(applier, parentComposition)
+    }
+    DisposableEffect(composition) {
+        onDispose {
+            state.dispose()
+            composition.dispose()
+        }
+    }
+    SideEffect { currentContent.value = content }
+    LaunchedEffect(composition) {
+        composition.setContent {
+            currentContent.value.invoke(MapScope)
+            SideEffect { state.publishIfDirty() }
+        }
+    }
+    return state.content
+}
+```
+
+`MapContentState.publishIfDirty` builds a complete next snapshot into a local value, validates
+marker IDs, copies the marker list, and assigns `content` only after the build succeeds. A builder
+failure leaves the last valid snapshot unchanged and propagates the deterministic validation
+exception through composition. `dispose` marks the state closed before disposing the child
+composition; subsequent invalidation or publication is a no-op.
+
+Marker identity behavior is fixed:
+
+| Event | Compose node | Native marker |
+| --- | --- | --- |
+| Same `id`, changed position/title/snippet | Update existing node; invalidate once | Move/update the existing marker |
+| Same IDs in a different order | `MapApplier.move` preserves node instances | Reorder the snapshot; do not recreate markers |
+| ID removed | Detach/remove node | Remove that native marker |
+| New ID | Insert node | Add one native marker |
+| ID changed at the same call site | Old keyed group is removed and a new group inserted | Remove old marker, add new marker |
+| Duplicate IDs in one snapshot | Snapshot build fails before publication | No partial native update |
+
+`MapScope.Marker` wraps its `ComposeNode` in `key(marker.id)` so declarative reordering uses the
+same identity as the native diff. The snapshot's list order is still retained for deterministic
+rendering and hit-test lookup.
+
+## Common-to-platform seam
+
+The provider module has one common implementation and one expect/actual surface boundary:
+
+```kotlin
+// :weft-map:kakaomap commonMain
+private class KakaoMapPlugin(
+    private val nativeAppKey: String,
+) : MapPlugin {
+    @Composable
+    override fun Content(
+        state: WeftMapState,
+        modifier: Modifier,
+        content: @Composable MapScope.() -> Unit,
+        onError: ((Throwable) -> Unit)?,
+    ) {
+        KakaoMapPlatformSurface(
+            nativeAppKey = nativeAppKey,
+            state = state,
+            content = rememberMapContent(content),
+            modifier = modifier,
+            onError = onError,
+        )
+    }
+}
+
+@Composable
+private expect fun KakaoMapPlatformSurface(
+    nativeAppKey: String,
+    state: WeftMapState,
+    content: MapContent,
+    modifier: Modifier,
+    onError: ((Throwable) -> Unit)?,
+)
+```
+
+The expect signature contains only core models and Compose types. Android and iOS actual functions
+own all native view creation, SDK callbacks, lifecycle observers, camera conversion, marker
+diffing, disposal, and error forwarding. No native coordinator or SDK type crosses into
+`commonMain`.
+
+Error and threading behavior is fixed:
+
+- Core model/config/duplicate-ID validation throws synchronously and is not routed to `onError`.
+- Native startup/render errors are wrapped in `KakaoMapException` and delivered at most once per
+  surface generation through `onError` on the platform main thread.
+- A null `onError` means the surface keeps its last valid content and performs no callback.
+- Exceptions thrown by a caller's `onError` callback propagate on the platform main thread; the
+  library does not swallow application callback failures.
+- A callback arriving after disposal or after a newer surface generation is ignored.
 
 Reference shape:
 
@@ -257,6 +376,51 @@ invalidates late `onMapReady` and `onMapError` callbacks. SDK initialization is 
 native key: reusing the same key is idempotent, while a different key reports an error through
 `onError`.
 
+Android lifecycle transitions are exact:
+
+| Event | Action |
+| --- | --- |
+| `AndroidView.factory` | Create `MapView`; state `Created` |
+| View attached, lifecycle below `RESUMED` | State `Attached`; defer `start` |
+| View attached and `ON_RESUME` | Call `start` once; state `Started` then `Ready` from callback |
+| `ON_PAUSE` or view detach | Call `pause` once; state `Paused` |
+| Reattach/`ON_RESUME` after pause | Call `resume`; do not recreate the SDK map |
+| `ON_DESTROY` or `onRelease` | Invalidate generation, call `finish` once, state `Finished` |
+| Any event after `Finished` | No-op |
+
+The coordinator uses `LocalLifecycleOwner` and `LifecycleEventObserver` from
+`lifecycle-runtime-compose`; it is the sole owner of `MapView` lifecycle calls. Android platform
+tests inject a fake host with the same transitions and assert call order. The internal Android seam
+is:
+
+```kotlin
+internal interface KakaoMapAndroidHost {
+    fun start(appKey: String, initialCamera: CameraPosition, onReady: () -> Unit, onError: (Throwable) -> Unit)
+    fun render(camera: CameraPosition, content: MapContent)
+    fun resume()
+    fun pause()
+    fun finish()
+}
+```
+
+`AndroidMapViewHost` adapts the real `MapView`; `FakeKakaoMapAndroidHost` records calls for unit
+tests. The coordinator, not the host, owns the generation token and transition validation.
+
+Camera and marker mapping is exact:
+
+- Before `Ready`, retain the latest `WeftMapState` and `MapContent`; apply both after the ready
+  callback.
+- After `Ready`, a camera value change issues one non-animated native camera update. The initial
+  implementation does not report camera gestures back to common state.
+- Bearing is normalized with `((bearing % 360) + 360) % 360`, so `360` becomes `0`.
+- Zoom uses `kotlin.math.roundToInt()` and is clamped to the ready map's native min/max level;
+  pre-ready values are clamped after the native range is known.
+- Tilt is clamped to `0..90` before conversion.
+- Marker `title` becomes the native label text; `snippet` remains in the common model but is not
+  rendered until a future info-window/click contract exists.
+- Native marker add/update/remove uses the identity table above and is applied as one coordinator
+  pass after each `MapContent` snapshot.
+
 The lifecycle/coordinator shape follows RunTheSpot's
 [PlatformMapSurface.android.kt](https://github.com/run-spot/RunTheSpot/blob/f2c87adb8965495e72256f9214bfde5113ec8f99/client/core/maps/src/androidMain/kotlin/run/thespot/ui/maps/PlatformMapSurface.android.kt),
 reduced to camera and marker rendering.
@@ -279,6 +443,13 @@ follow the existing RunTheSpot bridge (`KMController`, `KMViewContainer`, `Kakao
 `MapControllerDelegateProtocol`, `MapPoint`, `MapviewInfo`, `SDKInitializer`); the compile task
 must confirm the generated namespace and fail loudly if the package exposes a different API.
 
+iOS transitions mirror the Android contract: `Created -> AttachedZeroBounds -> Prepared -> Active
+-> ViewAdded -> Ready -> Paused -> Reset`. `layoutSubviews` retries `addViews` only when bounds
+become non-zero; `didMoveToWindow` pauses when the window becomes null and reactivates when it
+returns; `dispose` invalidates the generation, clears adapters, pauses the engine, resets it, and
+is idempotent. `authenticationFailed` and `addViewFailed` route a `KakaoMapException` to `onError`
+on the main thread. Late delegate calls after `Reset` are ignored.
+
 The exact SwiftPM import and generated symbol names must be verified by the iOS compile task; no
 manual Swift source is added to the Weft library in this slice.
 
@@ -292,15 +463,33 @@ manual Swift source is added to the Weft library in this slice.
   project name is `kakaomap`.
 - Add these version-catalog keys: `compose-ui` (`org.jetbrains.compose.ui:ui`),
   `compose-foundation` (`org.jetbrains.compose.foundation:foundation`), and
-  `kakao-maps-android` (`com.kakao.maps.open:android`, version `2.15.2`). Keep the iOS SwiftPM
-  version as `2.12.19` in the `swiftPackage(... version = exact("2.12.19"))` declaration.
+  `kakao-maps-android` (`com.kakao.maps.open:android`, version `2.15.2`), plus
+  `lifecycle-runtime-compose` (`org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose`,
+  version `2.10.0-alpha05`). Keep the iOS SwiftPM version as `2.12.19` in the
+  `swiftPackage(... version = exact("2.12.19"))` declaration.
 - Add the Kakao Maps Maven repository
   `https://devrepo.kakao.com/nexus/repository/kakaomap-releases/` to
   `dependencyResolutionManagement`; do not add a project repository.
 - Add `api(libs.compose.ui)` and `api(libs.compose.foundation)` to `:weft-core:commonMain`.
 - Add `api(project(":weft-core"))` to `:weft-map:kakaomap:commonMain`, the Compose convention to
   the provider module, `implementation(libs.compose.ui)` to its `androidMain`, and
-  `implementation(libs.kakao.maps.android)` to its `androidMain`.
+  `implementation(libs.kakao.maps.android)` plus `implementation(libs.lifecycle.runtime.compose)`
+  to its `androidMain`.
+- Configure the provider's Kotlin block exactly as:
+
+  ```kotlin
+  swiftPMDependencies {
+      discoverClangModulesImplicitly = true
+      swiftPackage(
+          url = url("https://github.com/kakao-mapsSDK/KakaoMapsSDK-SPM.git"),
+          version = exact("2.12.19"),
+          products = listOf(product("KakaoMapsSDK-SPM", platforms = setOf(iOS()))),
+      )
+  }
+  ```
+
+  The `iosMain` source set has no direct Maven dependency; its generated `swiftPMImport` symbols
+  come from this declaration.
 - Replace the root verify and BOM `weft-map` references with `weft-map:kakaomap` and the artifact
   `weft-kakaomap`; keep login and push unchanged. The BOM's generated dependency set must be
   exactly `run.thespot.weft:weft-core`, `run.thespot.weft:weft-kakaomap`,
