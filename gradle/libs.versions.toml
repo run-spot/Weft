@@ -12,3 +12,5 @@ kotlin-compose-compiler-plugin = { module = "org.jetbrains.kotlin:compose-compil
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "compose-runtime" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-runtime" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-runtime" }
+kakao-maps-android = { module = "com.kakao.maps.open:android", version = "2.15.2" }
+lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version = "2.10.0-alpha05" }

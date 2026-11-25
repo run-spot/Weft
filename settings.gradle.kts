@@ -14,9 +14,11 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven("https://devrepo.kakao.com/nexus/repository/kakaomap-releases/")
     }
 }
 
 rootProject.name = "Weft"
 
-include(":weft-core", ":weft-map", ":weft-login", ":weft-push", ":weft-bom", ":weft-gradle-plugin")
+include(":weft-core", ":weft-login", ":weft-push", ":weft-bom", ":weft-gradle-plugin")
+include(":weft-map:kakaomap")
