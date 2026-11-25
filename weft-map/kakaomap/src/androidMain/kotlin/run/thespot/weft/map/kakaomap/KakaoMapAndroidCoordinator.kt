@@ -25,7 +25,8 @@ internal interface KakaoMapAndroidHost {
         onError: (Throwable) -> Unit,
     )
 
-    fun render(camera: CameraPosition, content: MapContent)
+    /** A null camera means update children without resetting the native camera. */
+    fun render(camera: CameraPosition?, content: MapContent)
 
     fun resume()
 
@@ -203,9 +204,10 @@ internal class KakaoMapAndroidCoordinator(
             return
         }
 
+        val cameraToApply = normalizedCamera.takeIf { it != lastRenderedCamera }
         try {
-            host.render(normalizedCamera, content)
-            lastRenderedCamera = normalizedCamera
+            host.render(cameraToApply, content)
+            if (cameraToApply != null) lastRenderedCamera = cameraToApply
             lastRenderedMarkers = markers
             nativeStateMayBeOutOfSync = false
         } catch (throwable: Throwable) {

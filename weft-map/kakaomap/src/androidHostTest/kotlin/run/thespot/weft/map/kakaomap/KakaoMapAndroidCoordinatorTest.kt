@@ -178,6 +178,34 @@ class KakaoMapAndroidCoordinatorTest {
     }
 
     @Test
+    fun markerOnlyUpdateDoesNotResetNativeUserPan() {
+        val host = FakeKakaoMapAndroidHost()
+        val commonState = state(zoom = 12f, bearing = 20f)
+        val coordinator = coordinator(
+            host = host,
+            initialState = commonState,
+            initialContent = content(marker("first")),
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready(KakaoMapZoomBounds(min = 2, max = 18))
+        assertEquals(1, host.cameraUpdates.size)
+
+        val nativeUserPan = state(zoom = 7f, bearing = 75f).cameraPosition
+        host.simulateNativePan(nativeUserPan)
+
+        coordinator.update(
+            state = commonState,
+            content = content(marker("first"), marker("second")),
+            onError = null,
+        )
+
+        assertEquals(1, host.cameraUpdates.size)
+        assertEquals(nativeUserPan, host.nativeCamera)
+        assertEquals(nativeUserPan, host.renders.last().camera)
+    }
+
+    @Test
     fun markerReconciliationAddsUpdatesAndRemovesByStableId() {
         val layer = FakeTransactionalMarkerLayer()
         val reconciler = KakaoMapAndroidMarkerReconciler(layer)
@@ -525,6 +553,9 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
     val startedAppKeys = mutableListOf<String>()
     val readyBounds = mutableListOf<KakaoMapZoomBounds>()
     val renders = mutableListOf<RenderedMap>()
+    val cameraUpdates = mutableListOf<CameraPosition>()
+    var nativeCamera: CameraPosition? = null
+        private set
     val markerLayer = FakeTransactionalMarkerLayer()
     private val markerReconciler = KakaoMapAndroidMarkerReconciler(markerLayer)
     var initializeSdk: (String) -> Unit = {}
@@ -553,20 +584,27 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
         }
     }
 
-    override fun render(camera: CameraPosition, content: MapContent) {
+    override fun render(camera: CameraPosition?, content: MapContent) {
         markerLayer.failAfterMutatingAddId = failAfterMutatingMarkerAddId
         failAfterMutatingMarkerAddId = null
-        markerReconciler.renderWithCamera(
-            content = content,
-            applyCamera = {
-                if (failNextRender) {
-                    failNextRender = false
-                    throw IllegalArgumentException("camera render failed")
-                }
-            },
-            restoreCamera = {},
-        )
-        renders += RenderedMap(camera, content)
+        if (camera == null) {
+            markerReconciler.render(content)
+        } else {
+            val previousCamera = nativeCamera
+            markerReconciler.renderWithCamera(
+                content = content,
+                applyCamera = {
+                    if (failNextRender) {
+                        failNextRender = false
+                        throw IllegalArgumentException("camera render failed")
+                    }
+                    nativeCamera = camera
+                },
+                restoreCamera = { nativeCamera = previousCamera },
+            )
+            cameraUpdates += camera
+        }
+        renders += RenderedMap(checkNotNull(nativeCamera), content)
     }
 
     override fun resume() {
@@ -588,6 +626,10 @@ private class FakeKakaoMapAndroidHost : KakaoMapAndroidHost {
 
     fun fail(throwable: Throwable) {
         onError?.invoke(throwable)
+    }
+
+    fun simulateNativePan(camera: CameraPosition) {
+        nativeCamera = camera
     }
 }
 
