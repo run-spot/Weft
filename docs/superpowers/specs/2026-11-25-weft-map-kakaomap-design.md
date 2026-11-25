@@ -1,7 +1,7 @@
 # Weft Kakao Map Engine Design
 
 **Date:** 2026-11-25  
-**Status:** Scope approved; implementation follows this design
+**Status:** Scope approved; implementation follows this design after the final contract review
 
 ## Goal
 
@@ -235,11 +235,22 @@ public fun rememberMapContent(
 }
 ```
 
+The abbreviated implementation above has two required state details. `MapContentState` owns an
+observable `published` value initialized to `MapContent(emptyList())` using
+`mutableStateOf(..., neverEqualPolicy())`, and `content` reads `published.value`. It also owns an
+observable integer `invalidationToken`. `invalidate()` increments that token unless the state is
+disposed, and the child composition reads the token before invoking `currentContent`; this is the
+explicit bridge that turns `MapApplier` mutations into another child-composition pass. The outer
+provider composition reads `published.value`, so assigning a new immutable `MapContent` schedules
+the platform surface with the latest snapshot.
+
 `MapContentState.publishIfDirty` builds a complete next snapshot into a local value, validates
-marker IDs, copies the marker list, and assigns `content` only after the build succeeds. A builder
-failure leaves the last valid snapshot unchanged and propagates the deterministic validation
-exception through composition. `dispose` marks the state closed before disposing the child
-composition; subsequent invalidation or publication is a no-op.
+marker IDs, copies the marker list, and assigns `published.value` only after the build succeeds.
+A builder failure leaves the last valid snapshot unchanged and propagates the deterministic
+validation exception through composition. `dispose` marks the state closed before disposing the
+child composition; subsequent invalidation or publication is a no-op. The child composition's
+`SideEffect` is the only publication point, which makes one snapshot atomic from the platform
+surface's perspective.
 
 Marker identity behavior is fixed:
 
@@ -371,10 +382,11 @@ the provider error message; after disposal the callback is ignored.
 The Android coordinator owns the `MapView` created by `AndroidView`. Its state machine is
 `Created -> Attached -> Started -> Ready -> Paused -> Finished`; `resume` before `Started` is
 remembered and applied after start, `pause` is idempotent, and `finish` is called exactly once from
-`AndroidView.onRelease`/composition disposal. A monotonically increasing surface generation
-invalidates late `onMapReady` and `onMapError` callbacks. SDK initialization is guarded by the
-native key: reusing the same key is idempotent, while a different key reports an error through
-`onError`.
+`AndroidView.onRelease`/composition disposal. A pause or detach received before `start` only marks
+the coordinator paused; it does not call the native host's `pause`, and a later resume starts the
+map once. A monotonically increasing surface generation invalidates late `onMapReady` and
+`onMapError` callbacks. SDK initialization is guarded by the native key: reusing the same key is
+idempotent, while a different key reports an error through `onError`.
 
 Android lifecycle transitions are exact:
 
@@ -395,16 +407,28 @@ is:
 
 ```kotlin
 internal interface KakaoMapAndroidHost {
-    fun start(appKey: String, initialCamera: CameraPosition, onReady: () -> Unit, onError: (Throwable) -> Unit)
+    fun start(
+        appKey: String,
+        initialCamera: CameraPosition,
+        onReady: (KakaoMapZoomBounds) -> Unit,
+        onError: (Throwable) -> Unit,
+    )
     fun render(camera: CameraPosition, content: MapContent)
     fun resume()
     fun pause()
     fun finish()
 }
+
+internal data class KakaoMapZoomBounds(
+    val min: Int,
+    val max: Int,
+)
 ```
 
-`AndroidMapViewHost` adapts the real `MapView`; `FakeKakaoMapAndroidHost` records calls for unit
-tests. The coordinator, not the host, owns the generation token and transition validation.
+`AndroidMapViewHost` adapts the real `MapView` and passes the ready map's actual minimum and
+maximum native zoom levels to `onReady`. `FakeKakaoMapAndroidHost` records those bounds and all
+calls for unit tests. The coordinator, not the host, owns the generation token, transition
+validation, and pre-ready camera normalization.
 
 Camera and marker mapping is exact:
 
@@ -429,7 +453,7 @@ reduced to camera and marker rendering.
 
 - Configure `swiftPMDependencies` for
   `https://github.com/kakao-mapsSDK/KakaoMapsSDK-SPM.git`, exact version `2.12.19`, product
-  `KakaoMapsSDK-SPM`, restricted to iOS.
+  `KakaoMapsSDK-SPM`, restricted to iOS, and set `iosMinimumDeploymentTarget` to `13.0`.
 - Keep imports in `iosMain` through the generated `swiftPMImport` namespace.
 - Host the Kakao map view behind an `UIKitView`/platform surface and keep its coordinator outside
   `commonMain`.
@@ -443,12 +467,61 @@ follow the existing RunTheSpot bridge (`KMController`, `KMViewContainer`, `Kakao
 `MapControllerDelegateProtocol`, `MapPoint`, `MapviewInfo`, `SDKInitializer`); the compile task
 must confirm the generated namespace and fail loudly if the package exposes a different API.
 
+The iOS mapping contract is explicit:
+
+- `SDKInitializer.InitSDKWithAppKey` is process-global. A main-thread registry accepts the first
+  non-blank key, treats repeated initialization with the same key as a no-op, and reports a
+  different key as `KakaoMapException` through the current surface's `onError`.
+- `LatLng` becomes `MapPoint(longitude = longitude, latitude = latitude)`.
+- `zoom` is rounded with `roundToInt()` and clamped to the SDK map's integer level range before it
+  becomes `MapviewInfo.defaultLevel` or `CameraUpdate.zoomLevel`.
+- `bearing` is normalized to `0..360` degrees and converted to clockwise radians; `tilt` is
+  clamped to `0..90` degrees and converted to radians. The conversion is `degrees * PI / 180`.
+  Camera updates use the SDK's `CameraUpdate.make(target:zoomLevel:rotation:tilt:mapView:)`
+  contract and are non-animated.
+- The adapter creates one deterministic `PoiStyle`/`LabelLayer` pair per map view. A marker uses
+  `PoiOptions(poiID = marker.id, styleID = "weft_default_marker")`; a non-null title is supplied
+  as the first Poi text, while `snippet` is retained but not rendered. The style is registered
+  before any Poi is added. Position/title changes update the existing Poi; ID removal calls
+  `removePoi`, and an ID change removes the old Poi and adds a new one. If the SDK cannot create
+  the style, layer, or Poi, the whole render pass fails without partially publishing the snapshot.
+
+The iOS host seam is internal and mirrors the Android fake boundary:
+
+```kotlin
+internal interface KakaoMapIosHost {
+    fun prepare(
+        appKey: String,
+        initialCamera: CameraPosition,
+        onReady: (KakaoMapZoomBounds) -> Unit,
+        onError: (Throwable) -> Unit,
+    )
+    fun render(camera: CameraPosition, content: MapContent)
+    fun pause()
+    fun reset()
+}
+```
+
+`KakaoMapIosNativeHost` adapts `KMController`; `FakeKakaoMapIosHost` records prepare/render/pause/
+reset, supplies explicit zoom bounds, and manually triggers delegate callbacks. The coordinator
+owns generation tokens, non-zero-bounds retries, window attach/detach transitions, and idempotent
+disposal; it does not require an app key or live SDK in its state-machine tests.
+
 iOS transitions mirror the Android contract: `Created -> AttachedZeroBounds -> Prepared -> Active
 -> ViewAdded -> Ready -> Paused -> Reset`. `layoutSubviews` retries `addViews` only when bounds
 become non-zero; `didMoveToWindow` pauses when the window becomes null and reactivates when it
 returns; `dispose` invalidates the generation, clears adapters, pauses the engine, resets it, and
 is idempotent. `authenticationFailed` and `addViewFailed` route a `KakaoMapException` to `onError`
-on the main thread. Late delegate calls after `Reset` are ignored.
+on the main thread. Late delegate calls after `Reset` are ignored. The fake host tests cover each
+transition, zero-bounds retry, callback replacement, render failure, and disposal.
+
+SwiftPM integration is part of the repository/consumer contract. The first resolution must run
+the module's `integrateLinkagePackage` task against the consuming Xcode project, and the generated
+synthetic package plus `.swiftpm-locks/default/swiftImport/Package.resolved` are committed. The
+generated package must retain the Kakao package's `KakaoMapsSDKBundle.bundle` resource; an iOS
+smoke build fails if the bundle is absent. The provider's published KMP metadata does not make a
+consumer's Xcode project automatically adopt SwiftPM: the module guide documents the integration
+task and iOS 13 deployment target for every consumer.
 
 The exact SwiftPM import and generated symbol names must be verified by the iOS compile task; no
 manual Swift source is added to the Weft library in this slice.
@@ -485,6 +558,7 @@ manual Swift source is added to the Weft library in this slice.
           version = exact("2.12.19"),
           products = listOf(product("KakaoMapsSDK-SPM", platforms = setOf(iOS()))),
       )
+      iosMinimumDeploymentTarget.set("13.0")
   }
   ```
 
@@ -496,6 +570,25 @@ manual Swift source is added to the Weft library in this slice.
   `run.thespot.weft:weft-login`, and `run.thespot.weft:weft-push` at `VERSION_NAME`.
 - Keep the BOM metadata-only and aligned with the four currently published artifacts:
   `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`.
+- Treat `:weft-map` as a Gradle namespace/parent only. Root verification and release tasks enumerate
+  the four leaf libraries explicitly (`:weft-core`, `:weft-map:kakaomap`, `:weft-login`,
+  `:weft-push`) and never request `:weft-map:check` or `:weft-map:publishToMavenCentral`.
+- Update the `:weft-map` and `:weft-bom` module guides and the repository architecture guide in the
+  same change. A consumer resolving `weft-kakaomap` must add Kakao's Maven repository because a
+  Maven POM cannot guarantee that every consuming Gradle settings file accepts the vendor repo;
+  the module guide contains the exact `dependencyResolutionManagement` snippet and the publication
+  fixture verifies that the transitive Kakao dependency is resolvable with that repository.
+
+### SwiftPM toolchain gate
+
+The repository remains on the currently pinned stable Kotlin `2.4.21`; the user's threshold is met
+and no unrelated root-toolchain upgrade is made. SwiftPM import is an alpha/toolchain-sensitive
+feature whose current Kotlin documentation uses a `2.5.0-RC` validation example, so the first
+Gradle configuration/build step is an explicit compatibility gate. If `swiftPMDependencies` or the
+generated `swiftPMImport` namespace is unavailable on `2.4.21`, stop with the exact Gradle error
+and request the smallest toolchain decision (upgrade to the documented RC, or choose another iOS
+bridge). Do not silently downgrade to CocoaPods, add manual Swift source, or silently change the
+root Kotlin version.
 
 ## Testing and acceptance
 
@@ -521,8 +614,18 @@ manual Swift source is added to the Weft library in this slice.
 - Android coordinator tests use a fake platform host to cover `Created/Attached/Started/Ready/
   Paused/Finished`, duplicate initialization keys, late callbacks, marker add/update/remove, and
   camera normalization without requiring a live Kakao service.
+- iOS coordinator tests use `FakeKakaoMapIosHost` for startup, zero-bounds retry, camera/marker
+  mapping, late callbacks, render failures, callback replacement, and disposal/reset behavior.
 - iOS compile/link validation confirms SwiftPM product resolution, generated symbol imports,
+  `iosMinimumDeploymentTarget = 13.0`, the generated package/lock files, resource-bundle delivery,
   non-zero-bounds engine startup, and disposal/reset behavior on the macOS/Xcode environment.
+- A Compose runtime harness using a `Recomposer`/frame clock tests `rememberMapContent` and its
+  invalidation-to-publication handoff. `WeftMap`'s `Box` delegation test runs in an Android host
+  Compose test; it is not falsely claimed as a headless common test using a no-op applier.
+- Publication checks inspect the generated KMP POM for the Kakao SDK dependency and run a small
+  consumer-resolution fixture with Kakao's repository explicitly configured. They also inspect
+  merged Android manifest/consumer rules and record any vendor-required entries in the module
+  guide.
 - Android compilation and host tests with a configured Android SDK.
 - iOS compilation/linking on the configured macOS/Xcode environment, including SwiftPM resolution.
 
@@ -533,9 +636,10 @@ No Maven Central publication task is run.
 - Kakao Android and iOS SDK versions are intentionally pinned independently because their release
   trains differ. The Android quickstart documents `com.kakao.maps.open:android:2.15.2`; the iOS
   map release feed documents `2.12.19`, both reviewed on 2026-11-25.
-- SwiftPM import is a toolchain-sensitive KMP feature. If the iOS compile task exposes a Kotlin or
-  generated-symbol incompatibility, stop at the platform boundary and report the exact toolchain
-  blocker rather than weakening the common contract or adding vendor types to `commonMain`.
+- SwiftPM import is a toolchain-sensitive KMP feature. The stable `2.4.21` pin is preserved until
+  the compatibility gate proves it works; if it does not, stop at the platform boundary and report
+  the exact toolchain blocker rather than weakening the common contract or adding vendor types to
+  `commonMain`.
 - The first renderer does not promise full feature parity with RunTheSpot. It deliberately starts
   with camera and marker primitives so the contract can stabilize before adding routes, tracking,
   or rich marker styles.
