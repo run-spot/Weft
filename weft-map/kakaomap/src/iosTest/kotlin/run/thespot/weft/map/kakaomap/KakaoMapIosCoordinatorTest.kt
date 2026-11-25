@@ -121,7 +121,7 @@ class KakaoMapIosCoordinatorTest {
         coordinator.update(state(), markerOnlyContent, onError = null)
 
         assertEquals(cameraApplicationsAfterReady, host.cameraApplications)
-        assertEquals(null, host.renders.last().camera)
+        assertEquals(null, host.renderAttempts.last().camera)
 
         val renderCountAfterFailure = host.renders.size
         coordinator.update(state(), markerOnlyContent, onError = null)
@@ -256,6 +256,10 @@ class KakaoMapIosCoordinatorTest {
         )
         coordinator.onWindowAttached(width = 320.0, height = 640.0)
         host.ready(KakaoMapIosZoomBounds(min = 2, max = 18))
+        assertEquals(1, pendingMainCallbacks.size)
+        pendingMainCallbacks.removeAt(0).invoke()
+        assertEquals(1, host.renders.size)
+
         host.failNextRender = IllegalArgumentException("render failure")
 
         coordinator.update(state(zoom = 12f), content(marker("changed")), onError = { replacementErrors += it })
@@ -348,6 +352,7 @@ private class FakeKakaoMapIosHost : KakaoMapIosHost {
     val calls = mutableListOf<String>()
     val startedAppKeys = mutableListOf<String>()
     val renders = mutableListOf<KakaoMapIosRender>()
+    val renderAttempts = mutableListOf<KakaoMapIosRender>()
     var cameraApplications = 0
     var userPanCount = 0
     var sdkInitializations = 0
@@ -377,12 +382,14 @@ private class FakeKakaoMapIosHost : KakaoMapIosHost {
     }
 
     override fun render(camera: CameraPosition?, content: MapContent) {
+        val render = KakaoMapIosRender(camera, content)
+        renderAttempts += render
         failNextRender?.let { failure ->
             failNextRender = null
             throw failure
         }
         if (camera != null) cameraApplications++
-        renders += KakaoMapIosRender(camera, content)
+        renders += render
     }
 
     override fun pause() {
