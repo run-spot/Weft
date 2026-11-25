@@ -20,7 +20,6 @@ import org.gradle.api.Project
 public class WeftGradlePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         val extension = project.extensions.create("weft", WeftExtension::class.java)
-        extension.sourceDirectories.from(project.layout.projectDirectory.dir("src"))
 
         val scannedSources = project.files(extension.sourceDirectories).asFileTree
             .matching { tree ->

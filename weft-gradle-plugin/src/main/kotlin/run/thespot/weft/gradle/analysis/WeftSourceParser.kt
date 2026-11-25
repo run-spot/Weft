@@ -49,7 +49,9 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
                             }
 
                             ';' -> headerEnd = index
-                            '\n' -> if (supertypesStart >= 0) headerEnd = index
+                            '\n' -> if (supertypesStart >= 0 && startsNewDeclaration(index + 1)) {
+                                headerEnd = index
+                            }
                         }
                     }
                 }
@@ -275,6 +277,17 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
         return null
     }
 
+    /**
+     * True when the line after [from] starts a new declaration, which ends a body-less supertype
+     * list such as `interface Foo : Bar`. A supertype list may continue across lines, so a line
+     * break alone does not end the header.
+     */
+    private fun startsNewDeclaration(from: Int): Boolean {
+        val index = skipBlanks(from)
+        val rest = clean.substring(index)
+        return declarationStarters.any { rest.startsWith(it) }
+    }
+
     private fun skipBlanks(start: Int): Int {
         var index = start
         while (index < clean.length && clean[index].isWhitespace()) index++
@@ -288,6 +301,11 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
         val healthCheckRegex = Regex("""\bWeftHealthCheck\s*\(""")
         val assignmentRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)\s*=""")
         val namedArgumentRegex = Regex("""^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=""")
+        val declarationStarters = listOf(
+            "class ", "object ", "interface ", "fun ", "val ", "var ", "private ", "internal ",
+            "public ", "protected ", "open ", "abstract ", "@", "import ", "package ", "enum ",
+            "data ", "sealed ",
+        )
     }
 }
 

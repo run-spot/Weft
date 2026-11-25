@@ -90,6 +90,25 @@ class WeftPluginAnalyzerTest {
     }
 
     @Test
+    fun resolvesMultiLineSupertypeDeclaration() {
+        val analysis = analyze(
+            "src/commonMain/kotlin/Push.kt" to """
+                object WeftPush :
+                    WeftPlugin<PushConfig, PushPlugin> {
+                    override val pluginName: String = "push"
+                }
+            """.trimIndent(),
+            "src/commonMain/kotlin/Screen.kt" to """
+                val weft = Weft { install(WeftPush) }
+
+                fun register() = weft.get<PushPlugin>()
+            """.trimIndent(),
+        )
+
+        assertTrue(analysis.isValid, WeftReport.offline(analysis))
+    }
+
+    @Test
     fun reportsEmptyCredentialLiteral() {
         val analysis = analyze(
             "src/commonMain/kotlin/App.kt" to """
