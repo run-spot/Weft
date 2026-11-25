@@ -19,9 +19,10 @@ tasks.register("verify") {
         "checkPomFileForIosSimulatorArm64Publication",
     )
     weftLibraryProjects.forEach { libraryPath ->
-        kmpPublicationChecks.forEach { taskName ->
-            dependsOn("$libraryPath:$taskName")
-        }
+        // Native cinterop targets can be disabled on hosts without the required toolchain
+        // (for example, Kakao's iOS targets on Linux). Depend on the publication checks
+        // registered by each leaf instead of resolving absent platform task paths.
+        dependsOn(project(libraryPath).tasks.matching { it.name in kmpPublicationChecks })
     }
     dependsOn("verifyWeftBomPublication")
     dependsOn("verifyWeftMapLayout", "verifyKakaoMapPublication")
