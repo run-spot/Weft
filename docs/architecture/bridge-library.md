@@ -1,6 +1,6 @@
 # KMP bridge library contract
 
-This document defines the public boundary and distribution requirements for Weft's second deliverable: an Android/iOS native SDK bridge library. Choose a concrete SDK and stable API after a pilot.
+This document defines the public boundary and distribution requirements for Weft's Android/iOS native SDK bridge libraries. The first provider pilot is Kakao Maps, with a provider-neutral map API in `:weft-core` and a nested leaf at `:weft-map:kakaomap`.
 
 ## Goals
 
@@ -24,10 +24,10 @@ This library does not copy an Android interface unchanged into common Kotlin. It
 
 ## Initial module shape
 
-After selecting a real SDK, validate the smallest useful structure:
+Use the smallest useful structure for each provider:
 
 ~~~text
-<capability>/
+<capability>/<provider>/
   src/commonMain/       # public API, neutral models, shared validation
   src/androidMain/      # Android SDK adapter
   src/iosMain/          # Kotlin/Native adapter to Apple façade
@@ -41,26 +41,26 @@ Connect the common API with expect/actual or an injected platform provider when 
 
 ### Maven Central
 
-Publish each capability as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The initial `GROUP` is `run.thespot.weft`, with artifact IDs `weft-core`, `weft-map`, `weft-login`, and `weft-push`. The `weft-bom` artifact aligns their versions, and releases are coordinated. `weft-core` carries the plugin installation contract shared by the capability artifacts; it contains no vendor or platform types. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+Publish each capability/provider leaf as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The group is `run.thespot.weft`, with current artifact IDs `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`; `:weft-map` is a Gradle namespace, not a publication. The `weft-bom` artifact aligns those four artifacts, and releases are coordinated. `weft-core` carries the plugin installation and provider-neutral map contracts; it contains no vendor or platform types. The Kakao Android SDK is a runtime dependency of `weft-kakaomap`, so Android consumers must configure Kakao's Maven repository. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
 
 The build conventions, module coordinates, metadata, signing hooks, and staged release workflow are described in [Bridge library modules](library-modules.md) and [Maven Central publishing](maven-central-publishing.md). Nothing has been published yet.
 
 ### SwiftPM/Xcode
 
-Use SwiftPM inside the KMP bridge build to import the Objective-C-visible SDK façade. Publish the Kotlin adapter as a `run.thespot.weft:weft-*` KMP artifact to Maven Central. This gives Android and KMP Gradle consumers the approved Weft bridge dependency; it does not bundle the Swift package or replace SwiftPM resolution needed to build and link the iOS target.
+Use SwiftPM inside the KMP bridge build to import Objective-C/Clang-visible SDK APIs. The Kakao pilot imports KakaoMapsSDK-SPM 2.12.19 and publishes a Kotlin KMP adapter as `run.thespot.weft:weft-kakaomap`. The local framework and Xcode consumer fixture build with iOS 13.0 and include the vendor resource bundle. The pilot does not bundle the Swift package into Maven or replace SwiftPM resolution needed to build and link the iOS target.
 
 If native Swift consumers need the Kotlin framework directly, that is a separate XCFramework/SwiftPM binary distribution with its own public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target.
 
-Kotlin currently labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. Dual distribution is a design goal, not a completed implementation. Validate Swift package export, transitive SDK linking, archive creation, and checksum updates in an isolated prototype before promising a stable artifact contract.
+Kotlin labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. The observed local Kakao pilot on KGP 2.4.21 is not official support: runtime simulator tests on this Intel host and a remote Maven consumer remain unvalidated. Direct Swift consumers would need a separately published XCFramework with a versioned Package.swift, checksum, supported Apple architectures, and minimum deployment target.
 
 ## Pilot acceptance criteria
 
 - The Android and iOS SDKs support the same user-facing scenario.
 - The common API exposes no Android or Apple SDK types.
 - Success, cancellation, error, permission-denied, and missing-capability paths are checked.
-- Android unit/instrumentation checks and iOS simulator/device builds verify the adapters.
+- Android host checks and iOS device/simulator framework builds verify the adapters; Apple Silicon CI must run simulator runtime tests.
 - A separate Gradle consumer resolves the local Maven publication.
-- A SwiftPM consumer sample resolves the XCFramework and completes an archive build.
+- If direct Swift consumption is promised, a separate SwiftPM consumer sample resolves the XCFramework and completes an archive build.
 - Supported version tuples, iOS deployment target, Android minSdk, and API stability policy are documented.
 
 ## References

@@ -9,7 +9,7 @@ Do not copy version numbers without recording the Kotlin Gradle Plugin, Gradle, 
 - **candidate:** The official range or Weft CI validation is still being checked.
 - **unsupported:** Documentation or builds show the tuple cannot be used.
 
-Do not use these labels interchangeably. The ranges below were checked on 2026-11-24 and must be refreshed from official docs.
+Do not use these labels interchangeably. The ranges below were checked on 2026-11-26 and must be refreshed from official docs.
 
 ## AGP 9+
 
@@ -19,11 +19,11 @@ The Kotlin compatibility guide lists Kotlin 2.4.20–2.4.21 with Gradle 7.6.3–
 
 ## Weft bridge-library baseline
 
-The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1, with Android compile SDK 36, min SDK 24, and JVM target 17. This tuple is within the reviewed Kotlin compatibility range, and API 36 is supported by this AGP line. Keep it **candidate** until repository CI builds the Android and Apple targets and the modules contain real consumer-facing APIs. The local POM and Gradle configuration checks are not a full platform compatibility claim.
+The initial bridge-library build pins Kotlin 2.4.21, Gradle 9.7.0, and AGP 9.3.1, with Android compile SDK 37, min SDK 24, and JVM target 17. Compose 1.12 requires compileSdk 37, and AGP 9.3 supports API 37. Keep the tuple **candidate** until repository CI builds the Android and Apple targets and separate consumers validate the publications. The Kakao leaf is the first implemented provider; local checks are not a full platform compatibility claim.
 
 ## SwiftPM import compatibility gate
 
-Kotlin's SwiftPM import guide currently labels the feature Alpha and specifies KGP 2.5.0-RC for trying it. The bridge-library baseline above pins KGP 2.4.21 and has no SwiftPM SDK integration fixture, so it does not establish compatibility for Weft bridges. Do not add a SwiftPM-backed bridge or claim it is release-ready until a dedicated pilot selects an officially documented KGP version and validates a published Maven consumer's iOS link and archive path.
+Kotlin's SwiftPM import guide labels the feature Alpha and currently documents KGP 2.5.0-RC. Weft's Kakao pilot nevertheless demonstrated a local import on the baseline tuple (KGP 2.4.21, Gradle 9.7.0, AGP 9.3.1, Xcode 26.3, KakaoMapsSDK-SPM 2.12.19): device and simulator framework compilation/linking and an Xcode simulator consumer build passed, and the built frameworks/consumer target report iOS 13.0. The Xcode fixture also verified the SDK resource bundle. This is **observed**, not officially-supported: the implementation overrides Kotlin 2.4's default iOS 15 minimum for this leaf, test sources compile but simulator runtime tests are unavailable on the Intel build host, and remote Maven-consumer plus Apple Silicon CI validation remain release gates. Keep SwiftPM-backed libraries as candidates until those gates pass.
 
 ## Version update procedure
 
@@ -40,5 +40,7 @@ Kotlin's SwiftPM import guide currently labels the feature Alpha and specifies K
 - [AGP 9 migration for multiplatform projects](https://kotlinlang.org/docs/multiplatform/multiplatform-project-agp-9-migration.html)
 - [Android KMP library plugin](https://developer.android.com/kotlin/multiplatform/plugin)
 - [Compose Multiplatform compatibility and releases](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
+- [Jetpack Compose compiler and dependency setup](https://developer.android.com/develop/ui/compose/setup-compose-dependencies-and-compiler)
+- [Android Gradle Plugin 9.3 release notes](https://developer.android.com/build/releases/agp-9-3-0-release-notes)
 - [SwiftPM dependencies in KMP modules](https://kotlinlang.org/docs/multiplatform/multiplatform-spm-import.html)
 - [Android API and AGP compatibility](https://developer.android.com/studio/releases)

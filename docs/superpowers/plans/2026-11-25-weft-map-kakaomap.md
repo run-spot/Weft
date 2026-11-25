@@ -274,6 +274,12 @@
 
 **Files:**
 - Modify: `build.gradle.kts`
+- Modify: `gradle.properties`
+- Modify: `.github/workflows/verify.yml`
+- Modify: `.github/workflows/publish.yml`
+- Modify: `scripts/weft.py`
+- Modify: `scripts/verify.sh`
+- Create: `scripts/test_weft.py`
 - Modify: `weft-bom/build.gradle.kts`
 - Modify: `weft-map/AGENTS.md`
 - Modify: `weft-bom/AGENTS.md`
@@ -284,9 +290,11 @@
 - Modify: `docs/architecture/toolchain-policy.md`
 - Modify: `docs/architecture/maven-central-publishing.md`
 - Modify: `docs/architecture/bridge-library.md`
+- Modify: `weft-core/src/commonMain/kotlin/run/thespot/weft/core/WeftApp.kt`
 - Create: `harness/fixtures/weft-kakaomap-consumer/settings.gradle.kts`
 - Create: `harness/fixtures/weft-kakaomap-consumer/build.gradle.kts`
-- Create: `harness/fixtures/weft-kakaomap-consumer/src/main/kotlin/Consumer.kt`
+- Create: `harness/fixtures/weft-kakaomap-consumer/src/main/AndroidManifest.xml`
+- Create: `harness/fixtures/weft-kakaomap-consumer/src/main/java/consumer/Consumer.java`
 
 - [ ] **Step 1: Write failing build/publication checks**
   - Update/add checks that assert `:weft-map:kakaomap` is the only map leaf, the old `weft-map` artifact is absent, and BOM constraints are exactly core/kakaomap/login/push.
@@ -296,7 +304,7 @@
 - [ ] **Step 2: Run checks and verify RED**
   - Run: `./gradlew verifyWeftBomPublication`
   - Run: `./scripts/verify.sh`
-  - Expected: failures referencing the old flat `:weft-map` project/artifact and missing nested module wiring.
+  - Expected: the BOM/root graph checks fail on stale flat `:weft-map` wiring; repository verification also exposes generated vendor SwiftPM checkout files that must be excluded from source-text checks.
 
 - [ ] **Step 3: Implement module and publication wiring**
   - Verify the nested `:weft-map:kakaomap` registration from Task 4 and preserve the Kakao repository/catalog wiring there; this task must not reintroduce a flat `:weft-map` publication.
@@ -304,28 +312,30 @@
   - Replace `dependsOn(subprojects.map { "${it.path}:check" })` with explicit leaf paths (`:weft-core`, `:weft-map:kakaomap`, `:weft-login`, `:weft-push`, plus the BOM/plugin checks) so root verification never requests `:weft-map:check`.
   - Point the BOM at `project(":weft-map:kakaomap")` and explicit `weft-kakaomap` coordinates.
   - Update repository/module docs with the current provider milestone, vendor repository consumer setup, SwiftPM alpha/toolchain gate, iOS 13 requirement, lock/resource handling, and exact verification commands.
-  - Update the concrete Gradle consumer fixture to use `mavenLocal()` for the locally staged Weft publication and the exact Kakao Maven repository, then resolve `run.thespot.weft:weft-kakaomap:${VERSION_NAME}`.
+  - Update the concrete Android Gradle library consumer fixture to use `mavenLocal()` for the locally staged Weft publication and the exact Kakao Maven repository, then compile a Java source referencing `KakaoMap.INSTANCE` from `run.thespot.weft:weft-kakaomap:${VERSION_NAME}`.
+  - Compose 1.12 requires Android compile SDK 37; align the shared `android.compileSdk` property and CI SDK installation with API 37.
 
 - [ ] **Step 4: Run full verification and verify GREEN or report environment blockers**
   - Run: `./scripts/verify.sh`
   - Run: `./gradlew :weft-core:check :weft-map:kakaomap:check`
   - Run: `./gradlew :weft-core:checkPomFileForKotlinMultiplatformPublication :weft-map:kakaomap:checkPomFileForKotlinMultiplatformPublication`
   - Run: `./gradlew verifyWeftBomPublication`
-  - Run: `./gradlew :weft-map:kakaomap:publishToMavenLocal`
-  - Run: `test -f weft-map/kakaomap/build/publications/kotlinMultiplatform/pom-default.xml && rg -q 'com\.kakao\.maps\.open' weft-map/kakaomap/build/publications/kotlinMultiplatform/pom-default.xml`
-  - Run: `./gradlew -p harness/fixtures/weft-kakaomap-consumer -PVERSION_NAME=0.1.0-SNAPSHOT dependencies --configuration runtimeClasspath`
+  - Run: `./gradlew :weft-core:publishToMavenLocal :weft-map:kakaomap:publishToMavenLocal :weft-bom:publishToMavenLocal`
+  - Run: `test -f weft-map/kakaomap/build/publications/android/pom-default.xml && rg -q 'com\.kakao\.maps\.open' weft-map/kakaomap/build/publications/android/pom-default.xml`
+  - Run: `./gradlew -p harness/fixtures/weft-kakaomap-consumer -PVERSION_NAME=0.1.0-SNAPSHOT compileDebugJavaWithJavac`
+  - Run: `./gradlew -p harness/fixtures/weft-kakaomap-consumer -PVERSION_NAME=0.1.0-SNAPSHOT dependencies --configuration debugRuntimeClasspath`
   - Run: `! ./gradlew verify --dry-run | rg ':weft-map(:check|:publishToMavenCentral)'` and expect no matching lines.
   - Run: `! ./gradlew publishWeftReleaseToMavenCentral --dry-run | rg ':weft-map(:check|:publishToMavenCentral)'` and expect no matching lines.
   - Run: `./gradlew verify`
   - Expected: repository/script checks and all available JVM/host tasks pass; Android SDK or macOS/Xcode absence is reported with the exact failing command and not hidden.
 
 - [ ] **Step 5: Commit**
-  - `git add build.gradle.kts weft-bom/build.gradle.kts weft-map weft-bom README.md docs harness/fixtures/weft-kakaomap-consumer`
+  - `git add .github/workflows AGENTS.md README.md build.gradle.kts docs/architecture docs/superpowers/plans/2026-11-25-weft-map-kakaomap.md gradle.properties harness/fixtures/weft-kakaomap-consumer scripts/test_weft.py scripts/verify.sh scripts/weft.py weft-bom weft-core/src/commonMain/kotlin/run/thespot/weft/core/WeftApp.kt weft-map/AGENTS.md`
   - `git commit -m "build: publish Kakao map leaf module"`
 
 ## Final review and delivery
 
-- [ ] Re-read the spec and this plan against the complete diff; confirm no provider type leaked into `commonMain`, no credentials were added, and no publish task was run.
+- [ ] Re-read the spec and this plan against the complete diff; confirm no provider type leaked into `commonMain`, no credentials were added, and no Maven Central publication task was executed (`publishToMavenLocal` was used only for consumer validation).
 - [ ] Run the full verification commands fresh and record exit codes/output before any completion claim.
 - [ ] Dispatch a spec-compliance reviewer, then a code-quality reviewer, and fix/re-review every issue before integration.
 - [ ] Push `feature/map`, open a PR targeting `main`, wait for CI, and merge only after required checks pass; if CI or environment is blocked, report the exact blocker and leave the branch reproducible.

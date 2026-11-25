@@ -12,10 +12,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
  * needs a capability depends only on that capability:
  *
  * ```kotlin
- * @Composable
- * fun WeftMap(state: MapState, modifier: Modifier = Modifier) {
- *     val mapPlugin = LocalWeft.current.get<MapPlugin>()
- *     mapPlugin.Content(state, modifier)
+ * WeftApp(weft) {
+ *     WeftMap(WeftMapState(CameraPosition(LatLng(37.5665, 126.9780)))) {
+ *         Marker(MapMarker(id = "office", position = LatLng(37.5665, 126.9780)))
+ *     }
  * }
  * ```
  *
