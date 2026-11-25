@@ -27,6 +27,57 @@ import kotlin.test.assertTrue
 
 class MapContentCompositionTest {
     @Test
+    fun nodeInvalidationPublishesANewSnapshotWithoutParentContentChanges() {
+        val root = MapRootNode()
+        val state = MapContentState(root)
+        val applier = MapApplier(root, state::invalidate)
+        val original = marker("one", title = "before")
+        val node = MapMarkerNode(original)
+        applier.insertBottomUp(0, node)
+        state.publishIfDirty()
+        val previous = state.content
+
+        val frameClock = BroadcastFrameClock()
+        val context = Dispatchers.Unconfined + frameClock
+        val recomposer = Recomposer(context)
+        val scope = CoroutineScope(SupervisorJob() + context)
+        val recomposerJob = scope.launch { recomposer.runRecomposeAndApplyChanges() }
+        val composition = Composition(applier, recomposer)
+        var frameTimeNanos = 0L
+
+        try {
+            composition.setContent {
+                state.invalidationToken
+                state.markDirty()
+                SideEffect { state.publishIfDirty() }
+            }
+            repeat(3) {
+                Snapshot.sendApplyNotifications()
+                frameClock.sendFrame(++frameTimeNanos)
+                Snapshot.sendApplyNotifications()
+            }
+            assertSame(previous, state.content)
+
+            val updated = original.copy(title = "after")
+            node.updateMarker(updated)
+            repeat(3) {
+                Snapshot.sendApplyNotifications()
+                frameClock.sendFrame(++frameTimeNanos)
+                Snapshot.sendApplyNotifications()
+            }
+
+            assertNotSame(previous, state.content)
+            assertEquals(updated, state.content.markers.single())
+        } finally {
+            state.dispose()
+            composition.dispose()
+            recomposerJob.cancel()
+            recomposer.cancel()
+            scope.cancel()
+        }
+    }
+
+    @Test
     fun publishesAfterChildCompositionAndPublishesANewSnapshotAfterNodeInvalidation() {
         val markers = listOf(marker("one"))
         val harness = MapContentHarness(markerContent(markers))
