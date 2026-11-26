@@ -81,12 +81,18 @@ setContent {
 
 Reading `LocalWeft` outside `WeftApp` fails during composition with a message that names the wrapper, and a preview or UI test provides a fake runtime the same way.
 
-`WeftMap` delegates to the installed provider. Its child content is provider-neutral and keyed by marker ID:
+`WeftMap` delegates to the installed provider. Its child content is provider-neutral and keyed by element ID; markers and the basic polyline, polygon, and circle overlays share the same Compose node tree. See the [provider-neutral overlay contract](docs/superpowers/specs/2026-11-26-weft-map-overlays-design.md).
 
 ~~~kotlin
 WeftApp(weft) {
     WeftMap(WeftMapState(CameraPosition(LatLng(37.5665, 126.9780)))) {
         Marker(MapMarker(id = "seoul-city-hall", position = LatLng(37.5665, 126.9780)))
+        Polyline(id = "route", points = listOf(LatLng(37.5665, 126.9780), LatLng(37.5700, 126.9820)))
+        Polygon(
+            id = "service-area",
+            points = listOf(LatLng(37.5660, 126.9770), LatLng(37.5670, 126.9770), LatLng(37.5665, 126.9790)),
+        )
+        Circle(id = "pickup-radius", center = LatLng(37.5665, 126.9780), radiusMeters = 250.0)
     }
 }
 ~~~

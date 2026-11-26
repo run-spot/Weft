@@ -125,6 +125,101 @@ class MapContentCompositionTest {
     }
 
     @Test
+    fun publishesOrderedOverlaySnapshotsAndAllowsIdsAcrossKinds() {
+        val sameId = "shared-id"
+        val line = polyline(sameId)
+        val area = polygon(sameId)
+        val radius = MapCircle(sameId, LatLng(0.0, 0.0), 250.0)
+        val harness = MapContentHarness {
+            Marker(marker(sameId))
+            Polyline(line)
+            Polygon(area)
+            Circle(radius)
+        }
+
+        harness.use {
+            assertEquals(listOf(sameId), harness.latest.markers.map { it.id })
+            assertEquals(listOf(line), harness.latest.polylines)
+            assertEquals(listOf(area), harness.latest.polygons)
+            assertEquals(listOf(radius), harness.latest.circles)
+        }
+    }
+
+    @Test
+    fun overlayUpdatesRemovalReorderingAndVisibilityPublishCompleteOrderedSnapshots() {
+        val first = polyline("first")
+        val second = polyline("second")
+        val harness = MapContentHarness(overlayContent(polylines = listOf(first, second)))
+
+        harness.use {
+            val previous = harness.latest
+            harness.updateContent(
+                overlayContent(
+                    polylines = listOf(
+                        polyline("second", visible = false),
+                        polyline("third", visible = true),
+                    ),
+                ),
+            )
+
+            assertEquals(listOf("second", "third"), harness.latest.polylines.map { it.id })
+            assertEquals(listOf(false, true), harness.latest.polylines.map { it.visible })
+            assertEquals(listOf("first", "second"), previous.polylines.map { it.id })
+        }
+    }
+
+    @Test
+    fun duplicateOverlayIdsKeepTheLastPublishedSnapshot() {
+        val valid = polyline("route")
+        val harness = MapContentHarness(overlayContent(polylines = listOf(valid)))
+
+        harness.use {
+            val previous = harness.latest
+            val failure = assertFailsWith<IllegalArgumentException> {
+                harness.updateContent(overlayContent(polylines = listOf(valid, valid)))
+            }
+
+            assertEquals("duplicate polyline id: route", failure.message)
+            assertSame(previous, harness.latest)
+            assertEquals(listOf(valid), harness.latest.polylines)
+        }
+    }
+
+    @Test
+    fun duplicatePolygonIdsKeepTheLastPublishedSnapshot() {
+        val valid = polygon("service-area")
+        val harness = MapContentHarness(overlayContent(polygons = listOf(valid)))
+
+        harness.use {
+            val previous = harness.latest
+            val failure = assertFailsWith<IllegalArgumentException> {
+                harness.updateContent(overlayContent(polygons = listOf(valid, valid)))
+            }
+
+            assertEquals("duplicate polygon id: service-area", failure.message)
+            assertSame(previous, harness.latest)
+            assertEquals(listOf(valid), harness.latest.polygons)
+        }
+    }
+
+    @Test
+    fun duplicateCircleIdsKeepTheLastPublishedSnapshot() {
+        val valid = MapCircle("pickup-radius", LatLng(0.0, 0.0), 250.0)
+        val harness = MapContentHarness(overlayContent(circles = listOf(valid)))
+
+        harness.use {
+            val previous = harness.latest
+            val failure = assertFailsWith<IllegalArgumentException> {
+                harness.updateContent(overlayContent(circles = listOf(valid, valid)))
+            }
+
+            assertEquals("duplicate circle id: pickup-radius", failure.message)
+            assertSame(previous, harness.latest)
+            assertEquals(listOf(valid), harness.latest.circles)
+        }
+    }
+
+    @Test
     fun removalAndReorderingPublishOneCompleteOrderedSnapshot() {
         var contentRuns = 0
         val harness = MapContentHarness(
@@ -293,8 +388,24 @@ private fun markerContent(
     markers.forEach { Marker(it) }
 }
 
+private fun overlayContent(
+    polylines: List<MapPolyline> = emptyList(),
+    polygons: List<MapPolygon> = emptyList(),
+    circles: List<MapCircle> = emptyList(),
+): @Composable MapScope.() -> Unit = {
+    polylines.forEach { Polyline(it) }
+    polygons.forEach { Polygon(it) }
+    circles.forEach { Circle(it) }
+}
+
 private fun marker(id: String, title: String? = null) =
     MapMarker(id = id, position = LatLng(0.0, 0.0), title = title)
+
+private fun polyline(id: String, visible: Boolean = true) =
+    MapPolyline(id, listOf(LatLng(0.0, 0.0), LatLng(1.0, 1.0)), visible = visible)
+
+private fun polygon(id: String) =
+    MapPolygon(id, listOf(LatLng(0.0, 0.0), LatLng(1.0, 0.0), LatLng(0.0, 1.0)))
 
 private object NoOpApplier : AbstractApplier<Unit>(Unit) {
     override fun insertTopDown(index: Int, instance: Unit) = Unit

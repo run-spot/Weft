@@ -49,7 +49,7 @@
 - [ ] Implement node update/invalidation behavior matching `MapMarkerNode`.
 - [ ] Collect each overlay list in source order; validate all kinds before atomically publishing, and leave the prior `MapContent` intact on any validation error.
 - [ ] Ensure `MapContentState.publishIfDirty()` compares every overlay collection, not only markers.
-- [ ] Run `./gradlew :weft-core:iosSimulatorArm64Test` and confirm common composition/model tests pass.
+- [ ] Run `ANDROID_HOME="${HOME}/Library/Android/sdk" ./gradlew :weft-core:testAndroidHostTest` and confirm common composition/model tests pass.
 
 ### Task 4: Document and commit the common contract
 
@@ -58,7 +58,7 @@
 - Modify: `docs/architecture/library-modules.md`
 
 - [ ] Add a concise overlay usage example to `README.md`, link the design spec, and update marker-only architecture wording in `docs/architecture/library-modules.md`.
-- [ ] Run `./gradlew :weft-core:iosSimulatorArm64Test` and commit `feat(core): add provider-neutral map overlays`.
+- [ ] Run `ANDROID_HOME="${HOME}/Library/Android/sdk" ./gradlew :weft-core:testAndroidHostTest` and commit `feat(core): add provider-neutral map overlays`.
 - [ ] Push the verified common-contract commit and open/update the authorized Draft PR now, so the requester can follow the provider work in progress.
 
 ## Chunk 2: Android Kakao shape reconciliation
@@ -112,7 +112,7 @@
 - [ ] Create and own one Kakao iOS shape layer, style sets, and native shapes; project circles to polygon points where required.
 - [ ] Convert common colors, widths, coordinates, z-order, and visibility using the imported SDK bindings.
 - [ ] Include overlays in coordinator equality, rollback, reset, and retry behavior; route failures exactly once through the coordinator error path.
-- [ ] Run `./gradlew :weft-map:kakaomap:iosSimulatorArm64Test` and `./gradlew :weft-map:kakaomap:compileKotlinIosSimulatorArm64`; require both to pass or document the exact Apple-toolchain failure.
+- [ ] Run `./gradlew :weft-map:kakaomap:iosSimulatorArm64Test` and `./gradlew :weft-map:kakaomap:compileKotlinIosSimulatorArm64`; require the iOS target compilation to pass and record the native test task result (it may be `SKIPPED` on this host's `macos_x64` architecture).
 
 ## Chunk 4: Integration verification and delivery
 

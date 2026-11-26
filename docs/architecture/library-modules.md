@@ -37,7 +37,7 @@ val weft = Weft {
 val map = weft.get<MapPlugin>()
 ~~~
 
-Each plugin declares the `KClass` it installs under, and a capability family publishes one interface that its implementations use. `KakaoMap` installs as `MapPlugin`; `WeftMap` resolves that contract from `LocalWeft` and publishes immutable camera and marker snapshots to the platform adapter. A future provider can implement the same interface without changing map UI code.
+Each plugin declares the `KClass` it installs under, and a capability family publishes one interface that its implementations use. `KakaoMap` installs as `MapPlugin`; `WeftMap` resolves that contract from `LocalWeft` and publishes immutable camera, marker, polyline, polygon, and circle snapshots to the platform adapter. A future provider can implement the same interface without changing map UI code.
 
 Because the plugin type identifies the slot, only one plugin per type may be installed; a second installation throws `DuplicateWeftPluginException` naming the type and both plugin names. Resolution through `get<T>()` (or `get(KClass)`) throws `MissingWeftPluginException` when no plugin is installed, while `getOrNull<T>()` returns `null` for optional capabilities. Plugin `install` hooks run once after every registration is prepared, so a plugin may resolve peer plugins from the completed `Weft` scope.
 

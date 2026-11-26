@@ -30,21 +30,21 @@ Use a minimal provider-neutral contract rather than copying RunTheSpot's product
 
 ## Public common API
 
-All geographic coordinates use the existing validated `LatLng` model. All overlay models are immutable data classes and copy incoming point lists defensively.
+All geographic coordinates use the existing validated `LatLng` model. Overlay models are immutable value types with value equality and copy incoming point lists defensively. They expose `copy(...)` helpers while keeping the defensive point snapshot private to construction.
 
 ```kotlin
-public data class MapPolyline(
+public class MapPolyline(
     public val id: String,
-    public val points: List<LatLng>,
+    points: List<LatLng>,
     public val color: Color = Color(0xFF0B57D0),
     public val widthDp: Float = 6f,
     public val zIndex: Float = 0f,
     public val visible: Boolean = true,
 )
 
-public data class MapPolygon(
+public class MapPolygon(
     public val id: String,
-    public val points: List<LatLng>,
+    points: List<LatLng>,
     public val fillColor: Color = Color(0x1F3366FF),
     public val strokeColor: Color = Color(0x803366FF),
     public val strokeWidthDp: Float = 2f,
@@ -52,7 +52,7 @@ public data class MapPolygon(
     public val visible: Boolean = true,
 )
 
-public data class MapCircle(
+public class MapCircle(
     public val id: String,
     public val center: LatLng,
     public val radiusMeters: Double,
