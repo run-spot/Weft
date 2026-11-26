@@ -25,6 +25,8 @@
 - Modify: `build.gradle.kts`
 - Modify: `weft-map/AGENTS.md`
 - Modify: `AGENTS.md`
+- Modify: `README.md`
+- Modify: `docs/architecture/library-modules.md`
 
 - [ ] **Step 1: Add the Naver repository, version alias, project include, and BOM constraint**
 
@@ -69,7 +71,9 @@
 
   Update `AGENTS.md`, `weft-map/AGENTS.md`, and `weft-bom/AGENTS.md` to list
   `weft-navermap`, the Naver SDK versions, and the same provider-leaf verification rules as
-  Kakao. Keep the repository content in English.
+  Kakao. Update `README.md` with the Naver installation example and the one-provider-per-runtime
+  rule. Update `docs/architecture/library-modules.md` with the new leaf, artifact, SDK versions,
+  and iOS consumer gate. Keep the repository content in English.
 
 - [ ] **Step 5: Run the build configuration baseline**
 
@@ -89,7 +93,8 @@
 
   ```sh
   git add settings.gradle.kts gradle/libs.versions.toml weft-map/navermap/build.gradle.kts \
-    weft-bom/build.gradle.kts build.gradle.kts AGENTS.md weft-map/AGENTS.md weft-bom/AGENTS.md
+    weft-bom/build.gradle.kts build.gradle.kts AGENTS.md weft-map/AGENTS.md weft-bom/AGENTS.md \
+    README.md docs/architecture/library-modules.md
   git commit -m "build: scaffold Naver map provider leaf"
   ```
 
@@ -156,7 +161,8 @@
   to `:weft-core`. Assert the documented deterministic order is all markers, then polylines,
   then polygons, then circles; preserve each list's order; use
   `weft:marker:<id>`, `weft:polyline:<id>`, `weft:polygon:<id>`, and `weft:circle:<id>`; and
-  keep circle center/radius as circle fields. Test that teardown attempts cleanup, finish, and
+  keep circle center/radius as circle fields. Assert marker position, title, snippet, visibility,
+  and z-index fields in `NaverMapOverlayShape`. Test that teardown attempts cleanup, finish, and
   reference clearing even when earlier actions throw.
 
 - [ ] **Step 6: Run the new tests and verify the expected failure**
@@ -172,8 +178,9 @@
 - [ ] **Step 7: Implement common shape records and teardown**
 
   In `NaverMapOverlayShapes.kt`, define internal overlay kinds for marker, polyline, polygon,
-  and circle; define an immutable `NaverMapOverlayShape` carrying native ID, points or circle
-  center/radius, fill/stroke colors, width, z-index, visibility, and marker title/snippet data.
+  and circle; define an immutable `NaverMapOverlayShape` carrying native ID, marker position,
+  marker title/snippet, marker visibility/z-index, points or circle center/radius, fill/stroke
+  colors, width, z-index, and visibility.
   Implement a testable converter that accepts the four separate model lists, emits them in the
   documented marker/polyline/polygon/circle order, and a production overload that reads those
   lists from `MapContent`. Convert markers as well as shapes; do not approximate circles. In
@@ -509,32 +516,20 @@
 
 ## Chunk 4: Documentation, full verification, review, and delivery
 
-### Task 8: Finish documentation and repository verification
+### Task 8: Finish fixture documentation and repository verification
 
 **Files:**
-- Modify: `README.md`
-- Modify: `docs/architecture/library-modules.md`
-- Modify: `weft-map/AGENTS.md`
-- Modify: `AGENTS.md`
-- Modify: `weft-bom/AGENTS.md`
 - Modify: `harness/fixtures/weft-navermap-consumer/README.md`
 - Modify: `harness/fixtures/weft-navermap-ios-consumer/README.md`
 
-- [ ] **Step 1: Document installation and provider choice**
+- [ ] **Step 1: Document consumer fixture commands and platform gates**
 
-  Add an English README example showing `install(NaverMap) { ncpKeyId = ... }`, explain that
-  `NaverMap` and `KakaoMap` share `MapPlugin` and therefore cannot be installed together in one
-  `Weft` runtime, and link to the official Android/iOS SDK setup pages. Document that credentials
-  are client IDs and must be registered for the Android package/iOS bundle ID; use placeholders
-  only.
+  Add English README files for the Android and iOS fixtures with exact local publication,
+  `assemble`, `integrateLinkagePackage`, and `xcodebuild` commands. State that placeholders are
+  used for client IDs, no runtime credentials are committed, and an iOS linkage/consumer failure
+  blocks feature completion rather than being silently downgraded to Android-only support.
 
-- [ ] **Step 2: Update architecture/module milestones**
-
-  Add `:weft-map:navermap` / `weft-navermap` to `docs/architecture/library-modules.md`, the
-  module map, BOM list, and provider milestone. Record that Naver iOS uses official SPM
-  `SPM-NMapsMap` `3.24.1` and the dynamic framework consumer gate. Keep `:weft-map` a namespace.
-
-- [ ] **Step 3: Run repository checks after documentation and build changes**
+- [ ] **Step 2: Run repository checks after documentation and build changes**
 
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
@@ -549,12 +544,12 @@
   verification passed`. iOS runtime tests may report `SKIPPED` on `macos_x64`, but no iOS compile,
   link, or consumer gate may be skipped without an explicit blocker.
 
-- [ ] **Step 4: Commit documentation and final verification metadata**
+- [ ] **Step 3: Commit fixture documentation**
 
   ```sh
-  git add README.md docs/architecture/library-modules.md AGENTS.md weft-map/AGENTS.md \
-    weft-bom/AGENTS.md harness/fixtures
-  git commit -m "docs: document Naver map provider"
+  git add harness/fixtures/weft-navermap-consumer/README.md \
+    harness/fixtures/weft-navermap-ios-consumer/README.md
+  git commit -m "docs: record Naver map consumer validation"
   ```
 
 ### Task 9: Independent code review and final branch checks
