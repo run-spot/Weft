@@ -48,5 +48,6 @@ class KakaoMapHostTeardownTest {
 
         assertSame(cleanupFailure, failure)
         assertEquals(listOf("shapes", "finish", "clear"), calls)
+        assertEquals(listOf(finishFailure), failure.suppressedExceptions)
     }
 }

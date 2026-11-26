@@ -12,7 +12,12 @@ internal fun runKakaoMapHostTeardown(
         try {
             action()
         } catch (failure: Throwable) {
-            if (firstFailure == null) firstFailure = failure
+            val primary = firstFailure
+            if (primary == null) {
+                firstFailure = failure
+            } else if (primary !== failure) {
+                primary.addSuppressed(failure)
+            }
         }
     }
 
