@@ -8,6 +8,8 @@ import run.thespot.weft.core.map.MapPolyline
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotSame
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class KakaoMapOverlayShapesTest {
@@ -41,5 +43,33 @@ class KakaoMapOverlayShapesTest {
         assertEquals(projected.first(), projected.last())
         val firstDistance = distanceMeters(center, projected[0])
         assertTrue(firstDistance in 999.0..1001.0, "Expected ~1000m, got $firstDistance")
+    }
+
+    @Test
+    fun styleRegistryReusesStylesForGeometryVisibilityAndZOrderChanges() {
+        val created = mutableListOf<Pair<String, KakaoMapOverlayStyle>>()
+        val registry = KakaoMapOverlayStyleRegistry("weft:style") { id, style ->
+            (id to style).also(created::add)
+        }
+        val point = LatLng(37.0, 127.0)
+        val original = toKakaoMapOverlayShapes(
+            polylines = listOf(MapPolyline("route", listOf(point, LatLng(38.0, 128.0)))),
+            polygons = emptyList(),
+            circles = emptyList(),
+        ).single()
+
+        val originalStyle = registry.getOrCreate(original)
+        val changedGeometryAndVisibility = original.copy(
+            points = listOf(point, LatLng(39.0, 129.0)),
+            zIndex = 3f,
+            visible = false,
+        )
+
+        assertSame(originalStyle, registry.getOrCreate(changedGeometryAndVisibility))
+        assertEquals(1, created.size)
+
+        val changedAppearance = original.copy(strokeWidthDp = 5f)
+        assertNotSame(originalStyle, registry.getOrCreate(changedAppearance))
+        assertEquals(2, created.size)
     }
 }

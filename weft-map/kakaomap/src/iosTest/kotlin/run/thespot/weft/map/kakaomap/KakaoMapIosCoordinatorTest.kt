@@ -241,6 +241,25 @@ class KakaoMapIosCoordinatorTest {
     }
 
     @Test
+    fun iosOverlayStyleMappingPreservesColorAlphaAndRoundsWidthAndZOrder() {
+        val translucent = androidx.compose.ui.graphics.Color(
+            red = 1f,
+            green = 0.5f,
+            blue = 0.25f,
+            alpha = 0.4f,
+        )
+
+        val rgba = translucent.toKakaoMapIosOverlayColor()
+
+        assertEquals(1.0, rgba.red)
+        assertEquals(0.5, rgba.green)
+        assertEquals(0.25, rgba.blue)
+        assertTrue(kotlin.math.abs(rgba.alpha - 0.4) < 0.000001)
+        assertEquals(3uL, 2.6f.toKakaoMapIosStrokeWidth())
+        assertEquals(3, 2.6f.toKakaoMapIosZOrder())
+    }
+
+    @Test
     fun partialShapeFailureRestoresPriorSnapshotAndNextPassRetries() {
         val layer = FakeKakaoMapIosShapeLayer()
         val reconciler = KakaoMapIosShapeReconciler(layer)

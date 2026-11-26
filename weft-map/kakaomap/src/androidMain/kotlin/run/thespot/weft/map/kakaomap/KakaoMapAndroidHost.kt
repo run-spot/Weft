@@ -33,7 +33,6 @@ import com.kakao.vectormap.shape.PolylineStylesSet
 import com.kakao.vectormap.shape.ShapeLayer
 import com.kakao.vectormap.shape.ShapeLayerOptions
 import com.kakao.vectormap.shape.ShapeManager
-import androidx.compose.ui.graphics.toArgb
 import run.thespot.weft.core.map.CameraPosition
 import run.thespot.weft.core.map.MapContent
 import run.thespot.weft.core.map.MapMarker
@@ -170,13 +169,17 @@ internal class KakaoMapAndroidMapViewHost(
     }
 
     override fun finish() {
-        shapeLayer?.removeAll()
-        mapView.finish()
-        kakaoMap = null
-        markerLayer = null
-        markerReconciler = null
-        shapeLayer = null
-        shapeReconciler = null
+        runKakaoMapHostTeardown(
+            cleanupShapes = { shapeLayer?.removeAll() },
+            finishEngine = { mapView.finish() },
+            clearReferences = {
+                kakaoMap = null
+                markerLayer = null
+                markerReconciler = null
+                shapeLayer = null
+                shapeReconciler = null
+            },
+        )
     }
 
     private fun createShapeReconciler(map: KakaoMap): KakaoMapAndroidShapeReconciler {
@@ -188,30 +191,30 @@ internal class KakaoMapAndroidMapViewHost(
         ) { "Kakao Maps could not create the overlay shape layer." }
         shapeLayer = layer
         val nativeShapes = mutableMapOf<String, Any>()
-        var styleRevision = 0
-
-        fun nextPolylineStyle(shape: KakaoMapOverlayShape): PolylineStylesSet {
-            val styleId = "${shape.nativeId}:${styleRevision++}"
-            val widthPx = shape.strokeWidthDp * context.resources.displayMetrics.density
+        val density = context.resources.displayMetrics.density
+        val polylineStyles = KakaoMapOverlayStyleRegistry("weft:polyline-style") { styleId, style ->
+            val mapped = style.toKakaoMapAndroidStyle(density)
             val styles = PolylineStylesSet.from(
                 styleId,
-                PolylineStyles.from(PolylineStyle.from(widthPx, shape.strokeColor.toArgb())),
+                PolylineStyles.from(PolylineStyle.from(mapped.strokeWidthPx, mapped.strokeColorArgb)),
             )
             checkNotNull(manager.addPolylineStyles(styles)) { "Kakao Maps rejected polyline style '$styleId'." }
-            return styles
         }
-
-        fun nextPolygonStyle(shape: KakaoMapOverlayShape): PolygonStylesSet {
-            val styleId = "${shape.nativeId}:${styleRevision++}"
-            val widthPx = shape.strokeWidthDp * context.resources.displayMetrics.density
-            val fillArgb = shape.fillColor?.toArgb() ?: Color.TRANSPARENT
+        val polygonStyles = KakaoMapOverlayStyleRegistry("weft:polygon-style") { styleId, style ->
+            val mapped = style.toKakaoMapAndroidStyle(density)
+            val fillArgb = mapped.fillColorArgb ?: Color.TRANSPARENT
             val styles = PolygonStylesSet.from(
                 styleId,
-                PolygonStyles.from(PolygonStyle.from(0, fillArgb, widthPx, shape.strokeColor.toArgb())),
+                PolygonStyles.from(
+                    PolygonStyle.from(0, fillArgb, mapped.strokeWidthPx, mapped.strokeColorArgb),
+                ),
             )
             checkNotNull(manager.addPolygonStyles(styles)) { "Kakao Maps rejected polygon style '$styleId'." }
-            return styles
         }
+
+        fun nextPolylineStyle(shape: KakaoMapOverlayShape): PolylineStylesSet = polylineStyles.getOrCreate(shape)
+
+        fun nextPolygonStyle(shape: KakaoMapOverlayShape): PolygonStylesSet = polygonStyles.getOrCreate(shape)
 
         fun mapPoints(shape: KakaoMapOverlayShape): List<MapPoints> = listOf(
             MapPoints.fromLatLng(shape.points.map { KakaoLatLng.from(it.latitude, it.longitude) }),
@@ -225,7 +228,7 @@ internal class KakaoMapAndroidMapViewHost(
                             val options = PolylineOptions.from()
                                 .setMapPoints(mapPoints(shape))
                                 .setStylesSet(nextPolylineStyle(shape))
-                                .setZOrder(shape.zIndex.roundToInt())
+                                .setZOrder(shape.zIndex.toKakaoMapAndroidZOrder())
                                 .setVisible(shape.visible)
                                 .apply { polylineId = shape.nativeId }
                             val native = checkNotNull(layer.addPolyline(options)) {
@@ -237,7 +240,7 @@ internal class KakaoMapAndroidMapViewHost(
                             val options = PolygonOptions.from()
                                 .setMapPoints(mapPoints(shape))
                                 .setStylesSet(nextPolygonStyle(shape))
-                                .setZOrder(shape.zIndex.roundToInt())
+                                .setZOrder(shape.zIndex.toKakaoMapAndroidZOrder())
                                 .setVisible(shape.visible)
                                 .apply { polygonId = shape.nativeId }
                             val native = checkNotNull(layer.addPolygon(options)) {
@@ -255,7 +258,7 @@ internal class KakaoMapAndroidMapViewHost(
                                 "Kakao Maps polyline '${shape.nativeId}' is not present."
                             }
                             native.changeStylesAndMapPoints(nextPolylineStyle(shape), mapPoints(shape))
-                            native.setZOrder(shape.zIndex.roundToInt())
+                            native.setZOrder(shape.zIndex.toKakaoMapAndroidZOrder())
                             if (shape.visible) native.show() else native.hide()
                         }
                         KakaoMapOverlayKind.Polygon -> {
@@ -263,7 +266,7 @@ internal class KakaoMapAndroidMapViewHost(
                                 "Kakao Maps polygon '${shape.nativeId}' is not present."
                             }
                             native.changeStylesAndMapPoints(nextPolygonStyle(shape), mapPoints(shape))
-                            native.setZOrder(shape.zIndex.roundToInt())
+                            native.setZOrder(shape.zIndex.toKakaoMapAndroidZOrder())
                             if (shape.visible) native.show() else native.hide()
                         }
                     }
