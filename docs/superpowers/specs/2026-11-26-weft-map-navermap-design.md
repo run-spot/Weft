@@ -138,6 +138,10 @@ weft-map/navermap/
     NaverMapIosOverlayReconcilerTest.kt
 ```
 
+`NaverMap.kt` contains both the public `NaverMapConfig`/`NaverMap` declarations and the private
+`NaverMapPlugin` implementation. The private plugin is deliberately kept beside the public
+provider entry point, matching the existing Kakao leaf.
+
 Build integration changes:
 
 - `settings.gradle.kts`: include `:weft-map:navermap` and add
@@ -149,24 +153,37 @@ Build integration changes:
 - `build.gradle.kts`: add the leaf to library verification and coordinated release task lists;
   extend namespace verification to `{ "kakaomap", "navermap" }`; add
   `verifyNaverMapPublication` to assert that the Android POM declares
-  `com.naver.maps:map-sdk`.
+  `com.naver.maps:map-sdk`. Update the `gradle.taskGraph.whenReady` assertions so root
+  verification and coordinated release staging explicitly include
+  `:weft-map:navermap:check` and `:weft-map:navermap:publishToMavenCentral`.
 - `weft-bom/build.gradle.kts` and `weft-bom/AGENTS.md`: constrain and document
   `weft-navermap` alongside the existing published leaves.
-- `weft-map/AGENTS.md`, `docs/architecture/library-modules.md`, and the root README: document
-  the second provider, the one-provider-per-runtime rule, and the verified SDK versions.
+- `AGENTS.md`, `weft-map/AGENTS.md`, `docs/architecture/library-modules.md`, and the root README:
+  document the second provider, the one-provider-per-runtime rule, and the verified SDK versions.
 - Add a consumer fixture that resolves `run.thespot.weft:weft-navermap` through the BOM from a
-  separate Android project. Add an iOS SwiftPM/Xcode fixture if the KMP SwiftPM linkage task can
-  produce a runnable framework; otherwise record the exact linkage limitation as a verification
-  blocker instead of claiming iOS consumer support.
+  separate Android project. Add an iOS SwiftPM/Xcode fixture and treat its framework/resource
+  build as a hard completion gate. If the KMP SwiftPM linkage task cannot produce a runnable
+  consumer on the pinned toolchain, record the exact limitation and leave the feature explicitly
+  blocked rather than claiming completion.
 
 ## Android adapter
 
 Use `com.naver.maps.map.MapView` inside `AndroidView`, not a Fragment, so the provider surface
-fits the existing Compose adapter boundary. The surface owns one coordinator and forwards
-`MapView.onCreate`, `onStart`, `onResume`, `onPause`, `onStop`, `onDestroy`,
-`onSaveInstanceState`, and `onLowMemory` through the lifecycle owner. The coordinator must not
-start or render before the view is attached, resumed, and `getMapAsync` has delivered a
-`NaverMap` instance.
+fits the existing Compose adapter boundary. The surface owns one coordinator and a saved-state /
+component-callback bridge:
+
+- `factory` creates the `MapView`, calls `onCreate` exactly once with a restored or empty
+  `Bundle`, and registers a `SavedStateRegistry.SavedStateProvider` whose callback invokes
+  `onSaveInstanceState` into the registry bundle.
+- A `LifecycleEventObserver` forwards `ON_START`, `ON_RESUME`, `ON_PAUSE`, `ON_STOP`, and
+  `ON_DESTROY` to the corresponding `MapView` methods. `onDestroy` is terminal and unregisters
+  the saved-state provider.
+- A `ComponentCallbacks2` registered on the owning context forwards `onLowMemory` and is
+  unregistered during disposal. This is separate from the lifecycle observer because
+  `LifecycleEventObserver` cannot deliver saved-state or memory-pressure callbacks.
+
+The coordinator must not start or render before the view is attached, resumed, and
+`getMapAsync` has delivered a `NaverMap` instance.
 
 Before the first native view is created, initialize the SDK using
 `NaverMapSdk.getInstance(context).setClient(NaverMapSdk.NcpKeyClient(ncpKeyId))`. A process-local
@@ -232,10 +249,13 @@ lifecycle. The conversion rules mirror Android:
   the UIKit view is released.
 
 The iOS adapter must keep SDK authentication and render failures inside `NaverMapException` (or
-its cause) and call `onError` only while the surface is alive. If SwiftPM import, framework
-linking, resource delivery, or an Xcode consumer build fails on the pinned Kotlin/Xcode host, the
-implementation must stop at that verified boundary and document the blocker; it must not claim
-that a passing Kotlin compile alone proves iOS support.
+its cause) and call `onError` only while the surface is alive. The `UIKitView` host follows the
+Kakao lifecycle bridge: `didMoveToWindow` marks attach/detach, `layoutSubviews` forwards current
+width and height, and zero-sized bounds delay SDK preparation until a non-zero layout arrives.
+Detach pauses a prepared map; reset removes delegates and native overlays. If SwiftPM import,
+framework linking, resource delivery, or an Xcode consumer build fails on the pinned Kotlin/Xcode
+host, the implementation must stop at that verified boundary and document the blocker; it must
+not claim that a passing Kotlin compile alone proves iOS support.
 
 ## Shared reconciliation and lifecycle rules
 
@@ -282,6 +302,8 @@ Use the same invariants established by the Kakao implementation without importin
 ### Android host tests
 
 - Lifecycle events start/resume exactly once after attach and finish idempotently.
+- `MapView` receives create/start/resume/pause/stop/destroy, saved-state, and low-memory callbacks
+  exactly once per corresponding host event; disposal unregisters both callback bridges.
 - The latest pre-ready camera/content snapshot is rendered once when `getMapAsync` completes.
 - Camera bearing normalization and native zoom/tilt bounds are applied.
 - Marker and shape additions, updates, visibility changes, and removals preserve native object
@@ -298,8 +320,9 @@ Use the same invariants established by the Kakao implementation without importin
 - Map view creation/auth configuration happens once per surface and teardown removes delegates
   and overlays.
 - `compileKotlinIosSimulatorArm64`, framework linking, generated SwiftPM lock data, and the
-  Xcode consumer fixture are verified when supported by the host. Runtime simulator tests may be
-  skipped on `macos_x64`, but compile/link evidence is required.
+  Xcode consumer fixture are hard verification gates. Runtime simulator tests may be skipped on
+  `macos_x64`, but compile/link and consumer evidence is required; if the consumer cannot be
+  produced, the feature remains explicitly blocked.
 - The Android consumer fixture resolves the new artifact and BOM without a direct vendor SDK
   declaration. The root publication task checks the SDK dependency appears in the provider POM.
 
@@ -315,10 +338,10 @@ The feature is complete only when all of the following are true:
    `SPM-NMapsMap` `3.24.1` package and does not statically merge its dynamic framework.
 4. Lifecycle, SDK-key initialization, render rollback, and teardown behavior have automated test
    coverage for both platform adapters, with runtime skips explicitly recorded when host-limited.
-5. Root verification, BOM constraints, publication POM checks, module documentation, and a
-   separate consumer fixture all include `weft-navermap`.
-6. `./gradlew verify` and `./scripts/verify.sh` pass on the final branch, and no Maven Central
-   publication is performed.
+5. Root verification, task-graph/release assertions, BOM constraints, publication POM checks,
+   module documentation, and separate Android/iOS consumer fixtures all include `weft-navermap`.
+6. `./gradlew verify` and `./scripts/verify.sh` pass on the final branch, the iOS consumer gate
+   is green or explicitly blocks completion, and no Maven Central publication is performed.
 
 ## Official references
 
