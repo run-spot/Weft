@@ -15,8 +15,14 @@ import kotlinx.coroutines.launch
 import run.thespot.weft.core.map.CameraPosition
 import run.thespot.weft.core.map.LatLng
 import run.thespot.weft.core.map.MapContent
+import run.thespot.weft.core.map.MapCircle
+import run.thespot.weft.core.map.MapPolygon
+import run.thespot.weft.core.map.MapPolyline
 import run.thespot.weft.core.map.MapMarker
 import run.thespot.weft.core.map.Marker
+import run.thespot.weft.core.map.Polyline
+import run.thespot.weft.core.map.Polygon
+import run.thespot.weft.core.map.Circle
 import run.thespot.weft.core.map.WeftMapState
 import run.thespot.weft.core.map.rememberMapContent
 import kotlin.math.PI
@@ -133,6 +139,26 @@ class KakaoMapIosCoordinatorTest {
     }
 
     @Test
+    fun overlayOnlyUpdateRendersWithoutResettingNativeUserCamera() {
+        val host = FakeKakaoMapIosHost()
+        val coordinator = coordinator(host)
+        coordinator.onWindowAttached(width = 320.0, height = 640.0)
+        host.ready(KakaoMapIosZoomBounds(min = 2, max = 18))
+        val rendersBeforeUpdate = host.renders.size
+        val cameraApplications = host.cameraApplications
+        val contentWithOverlay = contentFactory.contentWithPolyline(
+            MapPolyline("route", listOf(LatLng(37.0, 126.0), LatLng(38.0, 127.0))),
+        )
+
+        coordinator.update(state(), contentWithOverlay, onError = null)
+
+        assertEquals(rendersBeforeUpdate + 1, host.renders.size)
+        assertEquals(null, host.renders.last().camera)
+        assertEquals(cameraApplications, host.cameraApplications)
+        assertEquals(listOf("route"), host.renders.last().content.polylines.map(MapPolyline::id))
+    }
+
+    @Test
     fun cameraMapperConvertsCoordinatesZoomAnglesAndNonAnimatedMode() {
         val fractionalZoom = state(zoom = 8.6f).cameraPosition
         assertEquals(9L, fractionalZoom.toKakaoMapIosDefaultLevel())
@@ -162,6 +188,99 @@ class KakaoMapIosCoordinatorTest {
         assertEquals(4, lowerBound.zoomLevel)
         assertEquals(0.0, lowerBound.rotationRadians, 0.00001)
         assertEquals(PI / 2.0, lowerBound.tiltRadians, 0.00001)
+    }
+
+    @Test
+    fun cameraFailureAfterShapeMutationRestoresSnapshotAndRetriesWithOneWrappedError() {
+        val initial = MapPolyline("route", listOf(LatLng(37.0, 126.0), LatLng(38.0, 127.0)))
+        val next = initial.copy(widthDp = 9f)
+        val initialContent = contentFactory.contentWithOverlays(polylines = listOf(initial))
+        val nextContent = contentFactory.contentWithOverlays(polylines = listOf(next))
+        val host = FakeKakaoMapIosHost()
+        val errors = mutableListOf<Throwable>()
+        val coordinator = coordinator(host, initialContent = initialContent, onError = { errors += it })
+        coordinator.onWindowAttached(width = 320.0, height = 640.0)
+        host.ready(KakaoMapIosZoomBounds(min = 2, max = 18))
+        val committedShapes = host.shapeLayer.shapes.toMap()
+        assertEquals(listOf("weft:polyline:route"), committedShapes.keys.toList())
+        host.failNextCameraMutationAfterApply = true
+
+        coordinator.update(state(zoom = 8f), nextContent, onError = { errors += it })
+
+        assertEquals(committedShapes, host.shapeLayer.shapes)
+        assertEquals(1, errors.size)
+        assertIs<KakaoMapException>(errors.single())
+
+        coordinator.update(state(zoom = 8f), nextContent, onError = { errors += it })
+
+        assertEquals(listOf("weft:polyline:route"), host.shapeLayer.shapes.keys.toList())
+        assertEquals(9f, host.shapeLayer.shapes.values.single().strokeWidthDp)
+        assertEquals(1, errors.size)
+    }
+
+    @Test
+    fun shapeReconciliationUsesKindPrefixedIdsAndRetainsHiddenShapes() {
+        val layer = FakeKakaoMapIosShapeLayer()
+        val reconciler = KakaoMapIosShapeReconciler(layer)
+        val pointA = LatLng(37.0, 126.0)
+        val line = MapPolyline("shared", listOf(pointA, LatLng(38.0, 127.0)), visible = false)
+        val polygon = MapPolygon("shared", listOf(pointA, LatLng(38.0, 127.0), LatLng(37.5, 128.0)))
+        val circle = MapCircle("shared", pointA, 500.0)
+
+        reconciler.render(contentFactory.contentWithOverlays(listOf(line), listOf(polygon), listOf(circle)))
+
+        assertEquals(
+            listOf("weft:polyline:shared", "weft:polygon:shared", "weft:circle:shared"),
+            layer.shapes.keys.toList(),
+        )
+        assertEquals(false, layer.shapes.getValue("weft:polyline:shared").visible)
+        assertTrue(layer.shapes.getValue("weft:circle:shared").isCircleApproximation)
+        reconciler.render(contentFactory.contentWithOverlays(polylines = listOf(line.copy(visible = true))))
+        assertEquals(listOf("weft:polyline:shared"), layer.shapes.keys.toList())
+        assertTrue(reconciler.snapshot.single().visible)
+    }
+
+    @Test
+    fun iosOverlayStyleMappingPreservesColorAlphaAndRoundsWidthAndZOrder() {
+        val translucent = androidx.compose.ui.graphics.Color(
+            red = 1f,
+            green = 0.5f,
+            blue = 0.25f,
+            alpha = 0.4f,
+        )
+
+        val rgba = translucent.toKakaoMapIosOverlayColor()
+
+        assertEquals(1.0, rgba.red)
+        assertEquals(0.5, rgba.green)
+        assertEquals(0.25, rgba.blue)
+        assertTrue(kotlin.math.abs(rgba.alpha - 0.4) < 0.000001)
+        assertEquals(3uL, 2.6f.toKakaoMapIosStrokeWidth())
+        assertEquals(3, 2.6f.toKakaoMapIosZOrder())
+    }
+
+    @Test
+    fun partialShapeFailureRestoresPriorSnapshotAndNextPassRetries() {
+        val layer = FakeKakaoMapIosShapeLayer()
+        val reconciler = KakaoMapIosShapeReconciler(layer)
+        val pointA = LatLng(37.0, 126.0)
+        val committed = MapPolyline("committed", listOf(pointA, LatLng(38.0, 127.0)))
+        reconciler.render(contentFactory.contentWithOverlays(polylines = listOf(committed)))
+        val previous = layer.shapes.toMap()
+        val requested = contentFactory.contentWithOverlays(
+            polylines = listOf(committed.copy(widthDp = 8f)),
+            polygons = listOf(MapPolygon("partial", listOf(pointA, LatLng(38.0, 127.0), LatLng(37.5, 128.0)))),
+        )
+        layer.failAfterMutatingId = "weft:polygon:partial"
+
+        assertFailsWith<IllegalStateException> { reconciler.render(requested) }
+        assertEquals(previous, layer.shapes)
+        assertEquals(previous.values.toList(), reconciler.snapshot)
+
+        reconciler.render(requested)
+
+        assertEquals(requested.toExpectedKakaoShapes(), layer.shapes.values.toList())
+        assertEquals(layer.shapes.values.toList(), reconciler.snapshot)
     }
 
     @Test
@@ -356,6 +475,9 @@ private class FakeKakaoMapIosHost : KakaoMapIosHost {
     var cameraApplications = 0
     var userPanCount = 0
     var sdkInitializations = 0
+    val shapeLayer = FakeKakaoMapIosShapeLayer()
+    private val shapeReconciler = KakaoMapIosShapeReconciler(shapeLayer)
+    var failNextCameraMutationAfterApply: Boolean = false
     var failNextRender: Throwable? = null
     private var onReady: ((KakaoMapIosZoomBounds) -> Unit)? = null
     private var onError: ((Throwable) -> Unit)? = null
@@ -384,11 +506,28 @@ private class FakeKakaoMapIosHost : KakaoMapIosHost {
     override fun render(camera: CameraPosition?, content: MapContent) {
         val render = KakaoMapIosRender(camera, content)
         renderAttempts += render
-        failNextRender?.let { failure ->
-            failNextRender = null
+        val previousShapes = shapeReconciler.snapshot
+        try {
+            shapeReconciler.render(content)
+            failNextRender?.let { failure ->
+                failNextRender = null
+                throw failure
+            }
+            if (camera != null) {
+                cameraApplications++
+                if (failNextCameraMutationAfterApply) {
+                    failNextCameraMutationAfterApply = false
+                    throw IllegalStateException("native camera mutation failed")
+                }
+            }
+        } catch (failure: Throwable) {
+            try {
+                shapeReconciler.restore(previousShapes)
+            } catch (rollbackFailure: Throwable) {
+                if (failure !== rollbackFailure) failure.addSuppressed(rollbackFailure)
+            }
             throw failure
         }
-        if (camera != null) cameraApplications++
         renders += render
     }
 
@@ -450,6 +589,9 @@ private class MapContentFactory : AutoCloseable {
     private val recomposerJob = scope.launch { recomposer.runRecomposeAndApplyChanges() }
     private val composition = Composition(NoOpApplier, recomposer)
     private val markers = mutableStateOf(emptyList<MapMarker>())
+    private val polylines = mutableStateOf(emptyList<MapPolyline>())
+    private val polygons = mutableStateOf(emptyList<MapPolygon>())
+    private val circles = mutableStateOf(emptyList<MapCircle>())
     private val content = mutableStateOf<MapContent?>(null)
     private var frameTimeNanos = 0L
 
@@ -457,6 +599,9 @@ private class MapContentFactory : AutoCloseable {
         composition.setContent {
             val snapshot = rememberMapContent {
                 markers.value.forEach { Marker(it) }
+                polylines.value.forEach { Polyline(it) }
+                polygons.value.forEach { Polygon(it) }
+                circles.value.forEach { Circle(it) }
             }
             SideEffect { content.value = snapshot }
         }
@@ -465,6 +610,22 @@ private class MapContentFactory : AutoCloseable {
 
     fun content(markers: List<MapMarker>): MapContent {
         this.markers.value = markers
+        recompose()
+        return checkNotNull(content.value) { "Map content was not published by composition." }
+    }
+
+    fun contentWithPolyline(polyline: MapPolyline): MapContent =
+        contentWithOverlays(polylines = listOf(polyline))
+
+    fun contentWithOverlays(
+        polylines: List<MapPolyline> = emptyList(),
+        polygons: List<MapPolygon> = emptyList(),
+        circles: List<MapCircle> = emptyList(),
+    ): MapContent {
+        markers.value = emptyList()
+        this.polylines.value = polylines
+        this.polygons.value = polygons
+        this.circles.value = circles
         recompose()
         return checkNotNull(content.value) { "Map content was not published by composition." }
     }
@@ -492,3 +653,33 @@ private object NoOpApplier : AbstractApplier<Unit>(Unit) {
     override fun move(from: Int, to: Int, count: Int) = Unit
     override fun onClear() = Unit
 }
+
+private class FakeKakaoMapIosShapeLayer : KakaoMapIosShapeLayer {
+    val shapes = linkedMapOf<String, KakaoMapOverlayShape>()
+    var failAfterMutatingId: String? = null
+    private val failure: Throwable = IllegalStateException("fake shape mutation failure")
+
+    override fun add(shape: KakaoMapOverlayShape) {
+        shapes[shape.nativeId] = shape
+        if (shape.nativeId == failAfterMutatingId) {
+            failAfterMutatingId = null
+            throw failure
+        }
+    }
+
+    override fun update(shape: KakaoMapOverlayShape) {
+        shapes[shape.nativeId] = shape
+    }
+
+    override fun remove(nativeId: String) {
+        shapes.remove(nativeId)
+    }
+
+    override fun restore(shapes: List<KakaoMapOverlayShape>) {
+        this.shapes.clear()
+        shapes.forEach { this.shapes[it.nativeId] = it }
+    }
+}
+
+private fun MapContent.toExpectedKakaoShapes(): List<KakaoMapOverlayShape> =
+    toKakaoMapOverlayShapes(polylines, polygons, circles)
