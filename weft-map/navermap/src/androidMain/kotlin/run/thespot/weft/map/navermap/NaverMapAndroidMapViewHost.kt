@@ -200,27 +200,35 @@ private class NaverMapAndroidNaverMarkerLayer(
     private val map: NaverMap,
     private val style: NaverMapAndroidOverlayStyle,
 ) : NaverMapAndroidMarkerLayer {
-    private val handles = linkedMapOf<String, NaverMarkerHandle>()
+    private val handles = NaverMapAndroidNativeHandleRegistry<NaverMarkerHandle> { it.detach() }
 
     override fun add(marker: run.thespot.weft.core.map.MapMarker): NaverMapAndroidNativeMarker =
-        NaverMarkerHandle().also { handles[marker.id] = it; it.apply(marker) }
+        NaverMarkerHandle(NaverMapAndroidNativeIds.marker(marker.id)).also {
+            handles.put(it.nativeId, it)
+            it.apply(marker)
+        }
 
     override fun update(native: NaverMapAndroidNativeMarker, marker: run.thespot.weft.core.map.MapMarker) {
         (native as NaverMarkerHandle).apply(marker)
     }
 
-    override fun remove(native: NaverMapAndroidNativeMarker, markerId: String) {
-        (native as NaverMarkerHandle).marker.map = null
-        handles.remove(markerId)
+    override fun remove(native: NaverMapAndroidNativeMarker, nativeId: String) {
+        handles.remove(nativeId)?.detach()
     }
 
     override fun restore(markers: List<run.thespot.weft.core.map.MapMarker>) {
-        val ids = markers.map { it.id }.toSet()
-        handles.filterKeys { it !in ids }.values.forEach { it.marker.map = null }
-        markers.forEach { marker -> (handles[marker.id] ?: NaverMarkerHandle().also { handles[marker.id] = it }).apply(marker) }
+        val ids = markers.map { NaverMapAndroidNativeIds.marker(it.id) }.toSet()
+        handles.retain(ids)
+        markers.forEach { marker ->
+            val nativeId = NaverMapAndroidNativeIds.marker(marker.id)
+            val handle = handles.get(nativeId) ?: NaverMarkerHandle(nativeId).also { handles.put(nativeId, it) }
+            handle.apply(marker)
+        }
     }
 
-    private inner class NaverMarkerHandle : NaverMapAndroidNativeMarker {
+    private inner class NaverMarkerHandle(
+        override val nativeId: String,
+    ) : NaverMapAndroidNativeMarker {
         val marker = com.naver.maps.map.overlay.Marker()
 
         fun apply(value: run.thespot.weft.core.map.MapMarker) {
@@ -231,6 +239,10 @@ private class NaverMapAndroidNaverMarkerLayer(
             marker.globalZIndex = style.zIndex(0f)
             marker.map = map
         }
+
+        fun detach() {
+            marker.map = null
+        }
     }
 }
 
@@ -238,27 +250,32 @@ private class NaverMapAndroidNaverShapeLayer(
     private val map: NaverMap,
     private val style: NaverMapAndroidOverlayStyle,
 ) : NaverMapAndroidShapeLayer {
-    private val handles = linkedMapOf<String, NaverShapeHandle>()
+    private val handles = NaverMapAndroidNativeHandleRegistry<NaverShapeHandle> { it.detach() }
 
     override fun add(shape: NaverMapAndroidShape): NaverMapAndroidNativeShape =
-        NaverShapeHandle(shape).also { handles[shape.id] = it }
+        NaverShapeHandle(shape).also { handles.put(it.nativeId, it) }
 
     override fun update(native: NaverMapAndroidNativeShape, shape: NaverMapAndroidShape) {
         (native as NaverShapeHandle).apply(shape)
     }
 
-    override fun remove(native: NaverMapAndroidNativeShape, shapeId: String) {
-        (native as NaverShapeHandle).detach()
-        handles.remove(shapeId)
+    override fun remove(native: NaverMapAndroidNativeShape, nativeId: String) {
+        handles.remove(nativeId)?.detach()
     }
 
     override fun restore(shapes: List<NaverMapAndroidShape>) {
-        val ids = shapes.map { it.id }.toSet()
-        handles.filterKeys { it !in ids }.values.forEach(NaverShapeHandle::detach)
-        shapes.forEach { shape -> (handles[shape.id] ?: NaverShapeHandle(shape).also { handles[shape.id] = it }).apply(shape) }
+        val ids = shapes.map(NaverMapAndroidShape::nativeId).toSet()
+        handles.retain(ids)
+        shapes.forEach { shape ->
+            val handle = handles.get(shape.nativeId) ?: NaverShapeHandle(shape).also { handles.put(shape.nativeId, it) }
+            handle.apply(shape)
+        }
     }
 
-    private inner class NaverShapeHandle(shape: NaverMapAndroidShape) : NaverMapAndroidNativeShape {
+    private inner class NaverShapeHandle(
+        shape: NaverMapAndroidShape,
+    ) : NaverMapAndroidNativeShape {
+        override val nativeId: String = shape.nativeId
         private var overlay: com.naver.maps.map.overlay.Overlay = create(shape)
 
         init { apply(shape) }

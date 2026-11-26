@@ -90,7 +90,6 @@ internal class NaverMapAndroidLifecycleBridge(
     fun onStart() {
         if (!disposed && !started) {
             started = true
-            stopped = false
             view.onStart()
         }
     }
@@ -112,7 +111,8 @@ internal class NaverMapAndroidLifecycleBridge(
     }
 
     fun onStop() {
-        if (!disposed && started && !stopped) {
+        if (!disposed && started) {
+            started = false
             stopped = true
             view.onStop()
         }
@@ -121,19 +121,36 @@ internal class NaverMapAndroidLifecycleBridge(
     fun dispose() {
         if (disposed) return
         disposed = true
-        if (providerRegistered) savedState.unregisterSavedStateProvider(savedStateKey)
+        var firstFailure: Throwable? = null
+
+        fun attempt(action: () -> Unit) {
+            try {
+                action()
+            } catch (failure: Throwable) {
+                val primary = firstFailure
+                if (primary == null) firstFailure = failure else primary.addSuppressedSafely(failure)
+            }
+        }
+
+        if (providerRegistered) attempt { savedState.unregisterSavedStateProvider(savedStateKey) }
         providerRegistered = false
-        componentCallbacks.unregister(lowMemoryCallback)
+        attempt { componentCallbacks.unregister(lowMemoryCallback) }
         if (resumed) {
             resumed = false
-            view.onPause()
-            onPauseCallback()
+            attempt {
+                view.onPause()
+                onPauseCallback()
+            }
         }
-        if (started && !stopped) {
+        if (started) {
+            started = false
             stopped = true
-            view.onStop()
+            attempt { view.onStop() }
         }
-        if (onFinishCallback == null) view.onDestroy() else onFinishCallback.invoke()
+        attempt {
+            if (onFinishCallback == null) view.onDestroy() else onFinishCallback.invoke()
+        }
+        firstFailure?.let { throw it }
     }
 }
 
@@ -218,12 +235,13 @@ internal actual fun NaverMapPlatformSurface(
     }
 }
 
-private class NaverMapAndroidSurface(
+internal class NaverMapAndroidSurface(
     private val ncpKeyId: String,
     initialState: WeftMapState,
     initialContent: MapContent,
     private val initialOnError: ((Throwable) -> Unit)?,
     private val mapViewFactory: NaverMapAndroidMapViewFactory = ProductionNaverMapViewFactory(),
+    private val initializeSdk: ((Context, String) -> Unit)? = null,
 ) {
     private var state = initialState
     private var content = initialContent
@@ -233,11 +251,24 @@ private class NaverMapAndroidSurface(
 
     fun createView(context: Context): View {
         check(!finished) { "Naver Maps Android surface is finished." }
+        return try {
+            createViewOrThrow(context)
+        } catch (_: Throwable) {
+            finished = true
+            initialOnError?.invoke(NaverMapException("Naver Maps Android surface initialization failed."))
+            View(context)
+        }
+    }
+
+    private fun createViewOrThrow(context: Context): View {
         val host = NaverMapAndroidMapViewHost(
             context = context,
             mapViewFactory = mapViewFactory,
-            initializeSdk = { key -> NaverMapSdk.getInstance(context).setClient(NaverMapSdk.NcpKeyClient(key)) },
-            density = context.resources.displayMetrics.density.coerceAtLeast(1f),
+            initializeSdk = { key ->
+                initializeSdk?.invoke(context, key)
+                    ?: NaverMapSdk.getInstance(context).setClient(NaverMapSdk.NcpKeyClient(key))
+            },
+            density = context.resources.displayMetrics.density,
         )
         val lifecycle = host.createLifecycle(ncpKeyId)
         val coordinator = NaverMapAndroidCoordinator(host, ncpKeyId, state, content, initialOnError)

@@ -370,6 +370,31 @@ class NaverMapAndroidCoordinatorTest {
         assertEquals(315.0, nativeMap.lastCamera?.bearing)
     }
 
+    @Test
+    fun reportsSdkFactoryFailureThroughOnErrorAndReturnsPlaceholderView() {
+        val secretKey = "secret-ncp-key"
+        val errors = mutableListOf<Throwable>()
+        var factoryCalled = false
+        val surface = NaverMapAndroidSurface(
+            ncpKeyId = secretKey,
+            initialState = state(),
+            initialContent = emptyContent(),
+            initialOnError = { errors += it },
+            mapViewFactory = NaverMapAndroidMapViewFactory {
+                factoryCalled = true
+                FakeHostViewLifecycle(mutableListOf())
+            },
+            initializeSdk = { _, key -> throw IllegalStateException("SDK failed for $key") },
+        )
+
+        val placeholder = surface.createView(Application())
+
+        assertIs<View>(placeholder)
+        assertFalse(factoryCalled)
+        assertEquals(1, errors.size)
+        assertFalse(errors.single().toString().contains(secretKey))
+    }
+
     private fun coordinator(
         host: FakeNaverMapAndroidHost,
         initialState: WeftMapState = state(),

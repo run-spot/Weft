@@ -6,16 +6,54 @@ import run.thespot.weft.core.map.MapMarker
 import run.thespot.weft.core.map.MapPolygon
 import run.thespot.weft.core.map.MapPolyline
 
-internal interface NaverMapAndroidNativeMarker
+internal object NaverMapAndroidNativeIds {
+    fun marker(id: String): String = "weft:marker:$id"
+    fun polyline(id: String): String = "weft:polyline:$id"
+    fun polygon(id: String): String = "weft:polygon:$id"
+    fun circle(id: String): String = "weft:circle:$id"
+}
 
-internal interface NaverMapAndroidNativeShape
+internal class NaverMapAndroidNativeHandleRegistry<T>(
+    private val detach: (T) -> Unit,
+) {
+    private val handles = linkedMapOf<String, T>()
+
+    internal val ids: Set<String>
+        get() = handles.keys.toSet()
+
+    internal fun get(nativeId: String): T? = handles[nativeId]
+
+    internal fun put(nativeId: String, handle: T) {
+        handles[nativeId] = handle
+    }
+
+    internal fun remove(nativeId: String): T? = handles.remove(nativeId)
+
+    internal fun retain(nativeIds: Set<String>) {
+        handles.entries
+            .filterNot { it.key in nativeIds }
+            .toList()
+            .forEach { entry ->
+                detach(entry.value)
+                handles.remove(entry.key)
+            }
+    }
+}
+
+internal interface NaverMapAndroidNativeMarker {
+    val nativeId: String
+}
+
+internal interface NaverMapAndroidNativeShape {
+    val nativeId: String
+}
 
 internal interface NaverMapAndroidMarkerLayer {
     fun add(marker: MapMarker): NaverMapAndroidNativeMarker
 
     fun update(native: NaverMapAndroidNativeMarker, marker: MapMarker)
 
-    fun remove(native: NaverMapAndroidNativeMarker, markerId: String)
+    fun remove(native: NaverMapAndroidNativeMarker, nativeId: String)
 
     /** Rebuild the complete committed marker snapshot after a partial native mutation. */
     fun restore(markers: List<MapMarker>)
@@ -26,14 +64,16 @@ internal interface NaverMapAndroidShapeLayer {
 
     fun update(native: NaverMapAndroidNativeShape, shape: NaverMapAndroidShape)
 
-    fun remove(native: NaverMapAndroidNativeShape, shapeId: String)
+    fun remove(native: NaverMapAndroidNativeShape, nativeId: String)
 
     /** Rebuild the complete committed shape snapshot after a partial native mutation. */
     fun restore(shapes: List<NaverMapAndroidShape>)
 }
 
 internal object NaverMapAndroidEmptyMarkerLayer : NaverMapAndroidMarkerLayer {
-    private object Handle : NaverMapAndroidNativeMarker
+    private object Handle : NaverMapAndroidNativeMarker {
+        override val nativeId: String = "weft:marker:empty"
+    }
     override fun add(marker: MapMarker): NaverMapAndroidNativeMarker = Handle
     override fun update(native: NaverMapAndroidNativeMarker, marker: MapMarker) = Unit
     override fun remove(native: NaverMapAndroidNativeMarker, markerId: String) = Unit
@@ -41,7 +81,9 @@ internal object NaverMapAndroidEmptyMarkerLayer : NaverMapAndroidMarkerLayer {
 }
 
 internal object NaverMapAndroidEmptyShapeLayer : NaverMapAndroidShapeLayer {
-    private object Handle : NaverMapAndroidNativeShape
+    private object Handle : NaverMapAndroidNativeShape {
+        override val nativeId: String = "weft:shape:empty"
+    }
     override fun add(shape: NaverMapAndroidShape): NaverMapAndroidNativeShape = Handle
     override fun update(native: NaverMapAndroidNativeShape, shape: NaverMapAndroidShape) = Unit
     override fun remove(native: NaverMapAndroidNativeShape, shapeId: String) = Unit
@@ -50,23 +92,27 @@ internal object NaverMapAndroidEmptyShapeLayer : NaverMapAndroidShapeLayer {
 
 internal sealed interface NaverMapAndroidShape {
     val id: String
+    val nativeId: String
     val visible: Boolean
     val zIndex: Int
 
     data class Polyline(val value: MapPolyline, val style: NaverMapAndroidOverlayStyle) : NaverMapAndroidShape {
         override val id: String get() = value.id
+        override val nativeId: String get() = NaverMapAndroidNativeIds.polyline(value.id)
         override val visible: Boolean get() = value.visible
         override val zIndex: Int get() = style.zIndex(value.zIndex)
     }
 
     data class Polygon(val value: MapPolygon, val style: NaverMapAndroidOverlayStyle) : NaverMapAndroidShape {
         override val id: String get() = value.id
+        override val nativeId: String get() = NaverMapAndroidNativeIds.polygon(value.id)
         override val visible: Boolean get() = value.visible
         override val zIndex: Int get() = style.zIndex(value.zIndex)
     }
 
     data class Circle(val value: MapCircle, val style: NaverMapAndroidOverlayStyle) : NaverMapAndroidShape {
         override val id: String get() = value.id
+        override val nativeId: String get() = NaverMapAndroidNativeIds.circle(value.id)
         override val visible: Boolean get() = value.visible
         override val zIndex: Int get() = style.zIndex(value.zIndex)
     }
@@ -93,7 +139,7 @@ internal class NaverMapAndroidOverlayReconciler(
     internal fun render(content: MapContent) {
         val next = content.toNaverSnapshot(style)
         if (!layerSynchronized) {
-            restoreFull(next)
+            restoreLayersOrThrow(next)
             committed = next
             layerSynchronized = true
             return
@@ -105,11 +151,10 @@ internal class NaverMapAndroidOverlayReconciler(
             reconcileShapes(next.shapes)
             committed = next
         } catch (failure: Throwable) {
-            try {
-                restoreFull(previous)
-            } catch (rollbackFailure: Throwable) {
+            val rollbackFailures = restoreLayers(previous)
+            if (rollbackFailures.isNotEmpty()) {
                 layerSynchronized = false
-                failure.addSuppressedSafely(rollbackFailure)
+                rollbackFailures.forEach(failure::addSuppressedSafely)
             }
             throw failure
         }
@@ -127,12 +172,12 @@ internal class NaverMapAndroidOverlayReconciler(
             applyCamera()
         } catch (failure: Throwable) {
             committed = previous
-            try {
-                restoreFull(previous)
-                layerSynchronized = true
-            } catch (rollbackFailure: Throwable) {
+            val rollbackFailures = restoreLayers(previous)
+            if (rollbackFailures.isNotEmpty()) {
                 layerSynchronized = false
-                failure.addSuppressedSafely(rollbackFailure)
+                rollbackFailures.forEach(failure::addSuppressedSafely)
+            } else {
+                layerSynchronized = true
             }
             try {
                 restoreCamera()
@@ -144,75 +189,81 @@ internal class NaverMapAndroidOverlayReconciler(
     }
 
     internal fun clear() {
-        var firstFailure: Throwable? = null
-        try {
-            markerLayer.restore(emptyList())
-        } catch (failure: Throwable) {
-            firstFailure = failure
-        }
-        try {
-            shapeLayer.restore(emptyList())
-        } catch (failure: Throwable) {
-            val primary = firstFailure
-            if (primary == null) firstFailure = failure else primary.addSuppressedSafely(failure)
-        }
+        val failures = restoreLayers(NaverMapAndroidOverlaySnapshot(emptyList(), emptyList()))
         markerHandles.clear()
         shapeHandles.clear()
         committed = NaverMapAndroidOverlaySnapshot(emptyList(), emptyList())
-        firstFailure?.let { throw it }
+        failures.firstOrNull()?.let { primary ->
+            failures.drop(1).forEach(primary::addSuppressedSafely)
+            throw primary
+        }
     }
 
     private fun reconcileMarkers(next: List<MapMarker>) {
-        val nextById = next.associateByStableId("marker")
+        val nextById = next.associateBy { NaverMapAndroidNativeIds.marker(it.id) }
         next.forEach { marker ->
-            val native = markerHandles[marker.id]
+            val nativeId = NaverMapAndroidNativeIds.marker(marker.id)
+            val native = markerHandles[nativeId]
             when {
-                native == null -> markerHandles[marker.id] = markerLayer.add(marker)
-                committed.markers.firstOrNull { it.id == marker.id } != marker -> markerLayer.update(native, marker)
+                native == null -> markerHandles[nativeId] = markerLayer.add(marker)
+                committed.markers.firstOrNull { NaverMapAndroidNativeIds.marker(it.id) == nativeId } != marker ->
+                    markerLayer.update(native, marker)
             }
         }
-        committed.markers.map(MapMarker::id).filterNot(nextById::containsKey).forEach { id ->
-            markerHandles.remove(id)?.let { markerLayer.remove(it, id) }
+        committed.markers.map { NaverMapAndroidNativeIds.marker(it.id) }.filterNot(nextById::containsKey).forEach { nativeId ->
+            markerHandles.remove(nativeId)?.let { markerLayer.remove(it, nativeId) }
         }
     }
 
     private fun reconcileShapes(next: List<NaverMapAndroidShape>) {
-        val nextById = next.associateByStableId("shape")
+        val nextById = next.associateBy(NaverMapAndroidShape::nativeId)
         next.forEach { shape ->
-            val native = shapeHandles[shape.id]
+            val native = shapeHandles[shape.nativeId]
             when {
-                native == null -> shapeHandles[shape.id] = shapeLayer.add(shape)
-                committed.shapes.firstOrNull { it.id == shape.id } != shape -> shapeLayer.update(native, shape)
+                native == null -> shapeHandles[shape.nativeId] = shapeLayer.add(shape)
+                committed.shapes.firstOrNull { it.nativeId == shape.nativeId } != shape -> shapeLayer.update(native, shape)
             }
         }
-        committed.shapes.map(NaverMapAndroidShape::id).filterNot(nextById::containsKey).forEach { id ->
-            shapeHandles.remove(id)?.let { shapeLayer.remove(it, id) }
+        committed.shapes.map(NaverMapAndroidShape::nativeId).filterNot(nextById::containsKey).forEach { nativeId ->
+            shapeHandles.remove(nativeId)?.let { shapeLayer.remove(it, nativeId) }
         }
     }
 
-    private fun restoreFull(snapshot: NaverMapAndroidOverlaySnapshot) {
-        markerLayer.restore(snapshot.markers)
-        shapeLayer.restore(snapshot.shapes)
+    private fun restoreLayers(snapshot: NaverMapAndroidOverlaySnapshot): List<Throwable> {
+        val failures = mutableListOf<Throwable>()
+        try {
+            markerLayer.restore(snapshot.markers)
+        } catch (failure: Throwable) {
+            failures += failure
+        }
+        try {
+            shapeLayer.restore(snapshot.shapes)
+        } catch (failure: Throwable) {
+            failures += failure
+        }
+        return failures
+    }
+
+    private fun restoreLayersOrThrow(snapshot: NaverMapAndroidOverlaySnapshot) {
+        val failures = restoreLayers(snapshot)
+        failures.firstOrNull()?.let { primary ->
+            failures.drop(1).forEach(primary::addSuppressedSafely)
+            throw primary
+        }
     }
 }
 
 private fun MapContent.toNaverSnapshot(style: NaverMapAndroidOverlayStyle): NaverMapAndroidOverlaySnapshot {
-    val markers = markers.associateByStableId("marker").values.toList()
+    val markers = markers.associateByStableId("marker") { NaverMapAndroidNativeIds.marker(it.id) }.values.toList()
     val shapes = buildList {
         polylines.forEach { add(NaverMapAndroidShape.Polyline(it, style)) }
         polygons.forEach { add(NaverMapAndroidShape.Polygon(it, style)) }
         circles.forEach { add(NaverMapAndroidShape.Circle(it, style)) }
-    }.associateByStableId("shape").values.toList()
+    }.associateByStableId("shape") { it.nativeId }.values.toList()
     return NaverMapAndroidOverlaySnapshot(markers, shapes)
 }
 
-private fun <T> List<T>.associateByStableId(kind: String, id: (T) -> String = { item ->
-    when (item) {
-        is MapMarker -> item.id
-        is NaverMapAndroidShape -> item.id
-        else -> error("Unsupported $kind overlay")
-    }
-}): Map<String, T> = linkedMapOf<String, T>().also { result ->
+private fun <T> List<T>.associateByStableId(kind: String, id: (T) -> String): Map<String, T> = linkedMapOf<String, T>().also { result ->
     forEach { item ->
         require(result.put(id(item), item) == null) {
             "Map content contains duplicate $kind id '${id(item)}'."
