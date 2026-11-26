@@ -183,6 +183,7 @@ internal class NaverMapIosCoordinator(
             lastRenderedPolygons = polygons
             lastRenderedCircles = circles
             nativeStateMayBeOutOfSync = false
+            errorReported = false
         } catch (failure: Throwable) {
             nativeStateMayBeOutOfSync = true
             if (cameraToApply != null) cameraMayBeOutOfSync = true

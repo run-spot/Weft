@@ -93,6 +93,35 @@ class NaverMapIosCoordinatorTest {
     }
 
     @Test
+    fun reportsAnotherFailureAfterSuccessfulRecovery() {
+        val host = FakeHost()
+        val errors = mutableListOf<Throwable>()
+        val coordinator = coordinator(host, onError = errors::add)
+        coordinator.onWindowAttached(320.0, 640.0)
+
+        host.failNextRender = IllegalStateException("first render failed")
+        host.ready()
+        assertEquals(1, errors.size)
+
+        coordinator.update(
+            WeftMapState(CameraPosition(LatLng(37.5, 127.0))),
+            contents.content("recovered"),
+            errors::add,
+        )
+        assertEquals(1, errors.size)
+
+        host.failNextRender = IllegalStateException("second render failed")
+        coordinator.update(
+            WeftMapState(CameraPosition(LatLng(37.5, 127.0))),
+            contents.content("broken-again"),
+            errors::add,
+        )
+
+        assertEquals(2, errors.size)
+        assertEquals("second render failed", errors.last().cause?.message)
+    }
+
+    @Test
     fun staleReadyCallbackAndFailuresAreIgnoredAfterReset() {
         val host = FakeHost()
         val errors = mutableListOf<Throwable>()
