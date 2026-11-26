@@ -1,5 +1,8 @@
 package run.thespot.weft.map.navermap
 
+import android.os.Bundle
+import android.app.Application
+import android.view.View
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
@@ -325,6 +328,48 @@ class NaverMapAndroidCoordinatorTest {
         assertSame(rollbackFailure, delivered.cause?.suppressedExceptions?.single())
     }
 
+    @Test
+    fun initializesSdkBeforeMapViewCreation() {
+        val events = mutableListOf<String>()
+        val lifecycle = FakeHostViewLifecycle(events)
+        val host = NaverMapAndroidMapViewHost(
+            context = Application(),
+            mapViewFactory = NaverMapAndroidMapViewFactory { events += "view"; lifecycle },
+            initializeSdk = { events += "sdk:$it" },
+        )
+
+        host.createView("test-key", Bundle())
+
+        assertEquals(listOf("sdk:test-key", "view", "create"), events)
+    }
+
+    @Test
+    fun mapsLatLngAndCameraToNativeValues() {
+        val lifecycle = FakeHostViewLifecycle(mutableListOf())
+        val nativeMap = FakeHostMapBridge()
+        val host = NaverMapAndroidMapViewHost(
+            context = Application(),
+            mapViewFactory = NaverMapAndroidMapViewFactory { lifecycle },
+            initializeSdk = {},
+        )
+        host.createView("test-key", Bundle())
+        host.start("test-key", state(target = LatLng(35.0, 129.0)).cameraPosition, { }, {})
+        lifecycle.ready(nativeMap)
+
+        val camera = CameraPosition(
+            target = LatLng(37.5665, 126.9780),
+            zoom = 12f,
+            bearing = -45f,
+            tilt = 30f,
+        )
+        host.render(camera, emptyContent()) {}
+
+        assertEquals(NaverMapAndroidNativeLatLng(37.5665, 126.9780), nativeMap.lastCamera?.target)
+        assertEquals(12.0, nativeMap.lastCamera?.zoom)
+        assertEquals(30.0, nativeMap.lastCamera?.tilt)
+        assertEquals(315.0, nativeMap.lastCamera?.bearing)
+    }
+
     private fun coordinator(
         host: FakeNaverMapAndroidHost,
         initialState: WeftMapState = state(),
@@ -483,4 +528,44 @@ private object NoOpApplier : AbstractApplier<Unit>(Unit) {
     override fun remove(index: Int, count: Int) = Unit
     override fun move(from: Int, to: Int, count: Int) = Unit
     override fun onClear() = Unit
+}
+
+private class FakeHostViewLifecycle(
+    private val events: MutableList<String>,
+) : NaverMapAndroidViewLifecycle {
+    override val view: View = View(Application())
+    private var callback: ((NaverMapAndroidMapBridge) -> Unit)? = null
+
+    override fun onCreate(bundle: Bundle) { events += "create" }
+    override fun onStart() = Unit
+    override fun onResume() = Unit
+    override fun onPause() = Unit
+    override fun onStop() = Unit
+    override fun onDestroy() = Unit
+    override fun onLowMemory() = Unit
+    override fun onSaveInstanceState(bundle: Bundle) = Unit
+    override fun getMapAsync(callback: (NaverMapAndroidMapBridge) -> Unit) { this.callback = callback }
+
+    fun ready(map: NaverMapAndroidMapBridge) {
+        callback?.invoke(map)
+    }
+}
+
+private class FakeHostMapBridge : NaverMapAndroidMapBridge {
+    override var cameraPosition = NaverMapAndroidNativeCameraPosition(
+        target = NaverMapAndroidNativeLatLng(0.0, 0.0),
+        zoom = 10.0,
+        tilt = 0.0,
+        bearing = 0.0,
+    )
+    override val minZoom = 0.0
+    override val maxZoom = 20.0
+    override val minTilt = 0.0
+    override val maxTilt = 60.0
+    var lastCamera: NaverMapAndroidNativeCameraPosition? = null
+
+    override fun moveCamera(camera: NaverMapAndroidNativeCameraPosition) {
+        lastCamera = camera
+        cameraPosition = camera
+    }
 }

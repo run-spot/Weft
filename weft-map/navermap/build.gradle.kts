@@ -36,6 +36,7 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.compose.ui)
             implementation(libs.lifecycle.runtime.compose)
+            implementation("androidx.savedstate:savedstate:1.4.0")
             implementation(libs.naver.maps.android)
         }
     }
