@@ -20,5 +20,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "Weft"
 
-include(":weft-core", ":weft-login", ":weft-push", ":weft-bom", ":weft-gradle-plugin")
+include(":weft-core", ":weft-login", ":weft-push", ":weft-live", ":weft-bom", ":weft-gradle-plugin")
 include(":weft-map:kakaomap")
