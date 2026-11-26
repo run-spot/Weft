@@ -26,9 +26,11 @@ jobs:
         run: ./gradlew verify
 
   verify-apple:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 26.2 for Firebase SwiftPM
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
