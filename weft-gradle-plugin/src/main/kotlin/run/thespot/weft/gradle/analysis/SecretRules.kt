@@ -71,7 +71,8 @@ internal object SecretRules {
 
     /** True when a value looks like a comma-free credential property such as `service_role_key`. */
     fun isForbiddenClientProperty(property: String): Boolean {
-        val normalized = property.lowercase().replace("_", "").replace("-", "")
+        val leaf = property.substringAfterLast('.').substringAfterLast('/').substringAfterLast(':')
+        val normalized = leaf.lowercase().replace("_", "").replace("-", "")
         return forbiddenClientProperties.any { it.lowercase() == normalized }
     }
 

@@ -60,15 +60,33 @@ coordinated release until the versioned remote `WeftLiveKit` package and an exte
 consumer have passed. It can be included only through the explicit `weftLiveReleaseEnabled=true`
 release gate.
 
-Capabilities are installed in one place through `:weft-core`, and a capability family such as maps exposes one plugin type so that its implementations are interchangeable:
+Each capability module owns a `WeftContribution`. In a multi-module app, Koin collects those contributions and one app module creates the runtime:
+
+~~~kotlin
+@Module
+@Configuration
+class AppWeftModule {
+    @Single
+    fun weft(contributions: List<WeftContribution>): Weft = Weft(contributions)
+}
+
+@KoinApplication
+class AppKoinApplication
+
+startKoin<AppKoinApplication> {
+    properties(mapOf("weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey))
+}
+val weft = KoinPlatform.getKoin().get<Weft>()
+~~~
+
+The Koin Compiler Plugin discovers configured modules on the application classpath. The Kakao provider contributes its own `KakaoMap` install and reads the native app key from the named Koin property. A consumer that does not use Koin can continue using the direct `Weft` DSL:
 
 ~~~kotlin
 val weft = Weft {
     install(KakaoMap) {
-        nativeAppKey = "kakao-native-app-key"
+        nativeAppKey = kakaoNativeAppKey
     }
 }
-
 val mapPlugin = weft.get<MapPlugin>()
 ~~~
 
@@ -113,7 +131,15 @@ plugins {
 }
 ~~~
 
-`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), when an `install(...)` block configures a credential as an empty or placeholder string, or when client code contains a credential that must not ship — a Supabase `service_role` JWT, a provider secret token (`sk-`, `ghp_`, `AKIA...`, `xox[baprs]-`, a private key block), or a privileged property such as `serviceRoleKey`. A finding reports only the category and `file:line`; the token never appears in the build output. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
+`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), when an `install(...)` block configures a credential as an empty or placeholder string, or when client code contains a credential that must not ship — a Supabase `service_role` JWT, a provider secret token (`sk-`, `ghp_`, `AKIA...`, `xox[baprs]-`, a private key block), or a privileged property such as `serviceRoleKey` in an install block or Koin property. A finding reports only the category and `file:line`; the token never appears in the build output. Since the verifier does not inspect compiled contributions from dependencies, list their capability types in the verifier's `installedTypes` metadata:
+
+~~~kotlin
+weft {
+    installedTypes.add("MapPlugin")
+}
+~~~
+
+This declaration is only for static analysis; runtime installation still comes from Koin. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
 
 `verifyWeftDependencies` enforces the direct-dependency allowlist. It is opt-in, because adopting it is a policy decision:
 

@@ -2,6 +2,7 @@ plugins {
     id("weft.kmp-library")
     id("weft.compose")
     id("weft.maven-publish")
+    id("weft.koin")
 }
 
 mavenPublishing {
@@ -34,6 +35,8 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":weft-core"))
+            api(libs.koin.annotations)
+            implementation(libs.koin.core)
         }
         androidMain.dependencies {
             implementation(libs.compose.ui)
