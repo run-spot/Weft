@@ -40,8 +40,9 @@
 
   Create `weft-map/navermap/build.gradle.kts` using the same three convention plugins as the
   Kakao leaf. Set `artifactId = "weft-navermap"`. Declare `iosArm64()` and
-  `iosSimulatorArm64()` framework binaries with base name `WeftNaverMap` and static KMP
-  framework output, matching the existing publication shape. Configure SwiftPM import with:
+  `iosSimulatorArm64()` framework binaries with base name `WeftNaverMap` and dynamic KMP
+  framework output (`isStatic = false`) so the official Naver dynamic xcframework is delivered
+  to consumers rather than silently merged. Configure SwiftPM import with:
 
   ```kotlin
   swiftPackage(
@@ -51,9 +52,12 @@
   )
   ```
 
-  Set `discoverClangModulesImplicitly = true` like the Kakao leaf. Keep `commonMain` dependent
-  only on `:weft-core`; put Compose UI, lifecycle compose, and `libs.naver.maps.android` in
-  `androidMain`. Do not add vendor SDK dependencies to `commonMain`.
+  Set `discoverClangModulesImplicitly = true` like the Kakao leaf, set
+  `iosMinimumDeploymentTarget.set("13.0")`, and add
+  `freeCompilerArgs += "-Xoverride-konan-properties=minVersion.ios=13.0"` to both Apple
+  framework binaries. Keep `commonMain` dependent only on `:weft-core`; put Compose UI, lifecycle
+  compose, and `libs.naver.maps.android` in `androidMain`. Do not add vendor SDK dependencies to
+  `commonMain`.
 
 - [ ] **Step 3: Add root verification and release task wiring before provider source exists**
 
@@ -400,6 +404,7 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
 **Files:**
 - Create: `weft-map/navermap/src/iosTest/kotlin/run/thespot/weft/map/navermap/NaverMapIosCoordinatorTest.kt`
 - Create: `weft-map/navermap/src/iosTest/kotlin/run/thespot/weft/map/navermap/NaverMapIosOverlayReconcilerTest.kt`
+- Create: `weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosNativeLayer.kt`
 - Create: `weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosCoordinator.kt`
 - Create: `weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosOverlayReconciler.kt`
 
@@ -408,9 +413,11 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   Add tests named `waitsForWindowAndNonZeroBounds`, `preventsDuplicatePreparation`,
   `pausesOnWindowDetachAndReactivatesOnAttach`, `rendersLatestContentWhenReady`,
   `normalizesCameraAndPreservesPanOnContentOnlyUpdate`, `ignoresCallbacksAfterReset`, and
-  `reportsOnlyOneErrorPerGeneration`. The fake host must record `prepare`, `activate`, `render`,
-  `pause`, and `reset`, deliver ready callbacks with explicit zoom bounds, and allow render
-  failures.
+  `reportsOnlyOneErrorPerGeneration`. Add a fake-host assertion named
+  `preparesSdkAndMapViewOncePerGeneration`; the fake host must record `prepare`, `activate`,
+  `render`, `pause`, and `reset`, deliver ready callbacks with explicit zoom bounds, and allow
+  render failures. The preparation assertion must prove one SDK/auth and map-view preparation per
+  live surface, while a new generation may prepare again.
 
 - [ ] **Step 2: Run the iOS tests to verify the expected missing implementation failure**
 
@@ -421,42 +428,78 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   Expected: compilation fails because `NaverMapIosCoordinator` and its host contract do not
   exist. Do not add the native SDK imports yet.
 
-- [ ] **Step 3: Implement the iOS coordinator state machine**
+- [ ] **Step 3: Write failing iOS reconciliation tests against a provider-neutral seam**
+
+  Add fake native marker/overlay layers and tests named `addsUpdatesAndRemovesNativeOverlaysById`,
+  `keepsCircleAsGeographicCircle`, `preservesColorAlphaAndPointWidth`, `restoresAfterRenderFailure`,
+  and `clearsDelegatesAndOverlaysOnReset`. Define the provider-neutral contracts expected by
+  `NaverMapIosOverlayReconciler` in the test-facing design, with no `NMF*`, `NMGLatLng`, UIKit, or
+  SwiftPM imports. Assert the exact provider-neutral geometry/style snapshot and rollback after
+  partial mutation; the fake layer must preserve native identity for updates.
+
+- [ ] **Step 4: Run the reconciliation tests and verify the expected missing-symbol failure**
+
+  ```sh
+  ./gradlew :weft-map:navermap:compileTestKotlinIosSimulatorArm64
+  ```
+
+  Expected: compilation fails because the iOS overlay reconciler and native-layer seam are absent.
+  This failure is observed before either production iOS coordinator or reconciler implementation.
+
+- [ ] **Step 5: Implement the iOS coordinator, provider-neutral native layer, and reconciler**
 
   Mirror the Kakao coordinator's attach/layout/readiness states: `Created`, `AttachedZeroBounds`,
   `Prepared`, `Ready`, `Paused`, and `Reset`. Gate preparation on a non-zero window size, use a
   generation counter to ignore stale callbacks, keep latest camera/content snapshots before
   readiness, normalize bearing, clamp zoom/tilt, and render camera only when changed. Wrap host
-  failures in `NaverMapException` and invoke `onError` only while the generation is live.
+  failures in `NaverMapException` and invoke `onError` only while the generation is live. Keep
+  `NaverMapIosNativeLayer.kt` free of vendor types: it owns fakeable marker/overlay handles,
+  camera/coordinate/style value mapping, and the transaction boundary consumed by the coordinator
+  and reconciler. The production Naver host will implement this seam in Task 6.
 
-- [ ] **Step 4: Write failing iOS reconciliation tests**
-
-  Add fake marker/overlay layers and tests named `addsUpdatesAndRemovesNativeOverlaysById`,
-  `keepsCircleAsGeographicCircle`, `preservesColorAlphaAndPointWidth`, `restoresAfterRenderFailure`,
-  and `clearsDelegatesAndOverlaysOnReset`. Assert Naver overlay classes receive the exact
-  provider-neutral geometry/style snapshot and rollback is attempted after partial mutation.
-
-- [ ] **Step 5: Run the focused iOS tests and commit the pure coordinator slice**
+- [ ] **Step 6: Run the focused iOS tests and commit the pure coordinator/reconciler slice**
 
   ```sh
   ./gradlew :weft-map:navermap:compileTestKotlinIosSimulatorArm64
   git add weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosCoordinator.kt \
+    weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosNativeLayer.kt \
     weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosOverlayReconciler.kt \
     weft-map/navermap/src/iosTest
-  git commit -m "feat: add Naver iOS map coordinator"
+  git commit -m "feat: add Naver iOS coordinator and reconciler"
   ```
 
-  Expected: the iOS test sources compile; runtime test execution may be skipped on `macos_x64`.
+  Expected: both coordinator and reconciliation test sources compile; runtime test execution may
+  be skipped on `macos_x64`.
 
 ### Task 6: Implement the Naver iOS SwiftPM host and verify native linkage
 
 **Files:**
 - Create: `weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapIosHost.kt`
 - Create: `weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.ios.kt`
+- Create: `weft-map/navermap/src/iosTest/kotlin/run/thespot/weft/map/navermap/NaverMapIosHostTest.kt`
 - Modify: `.swiftpm-locks/default/swiftImport/Package.resolved`
 - Create/modify: generated SwiftPM linkage package under `weft-map/navermap/build/` only through the Gradle task
 
-- [ ] **Step 1: Compile the SwiftPM import boundary before writing the host**
+- [ ] **Step 1: Write failing host lifecycle tests at the vendor-free native boundary**
+
+  Add `NaverMapIosHostTest` cases `configuresAuthBeforeMapViewCreation`,
+  `createsOneMapViewPerSurface`, and `removesDelegatesBeforeReleasingView`. Inject a fake
+  `NaverMapIosNativeViewFactory`/auth configurator behind `NaverMapIosNativeLayer`; assert the NCP
+  client is configured before the first view-factory invocation (the production invocation creates
+  `NMFMapView`), repeated preparation reuses the same view, and teardown removes delegates/overlays
+  before release. Keep the tests vendor-free; they must not import UIKit or Naver types.
+
+- [ ] **Step 2: Run the host tests and verify the expected missing-host-symbol failure**
+
+  ```sh
+  ./gradlew :weft-map:navermap:compileTestKotlinIosSimulatorArm64
+  ```
+
+  Expected: compilation fails because `NaverMapIosHost` and its injected factory/auth seams are
+  absent. This failure is observed before the official SwiftPM import is inspected or the host is
+  implemented.
+
+- [ ] **Step 3: Compile the SwiftPM import boundary before implementing the host**
 
   ```sh
   ./gradlew :weft-map:navermap:generateSyntheticLinkageSwiftPMImportProjectForCinteropsAndLdDump \
@@ -467,7 +510,7 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   generated cinterop declarations only to confirm names; keep generated output out of source
   control except the repository's persisted lock file.
 
-- [ ] **Step 2: Implement the iOS host with official Naver APIs**
+- [ ] **Step 4: Implement the iOS host with official Naver APIs**
 
   Create `NMFMapView`, configure `NMFAuthManager.shared().client` with
   `NMFNcpKeyClient(ncpKeyId)`, and implement the host contract. Use `UIKitView` through a custom
@@ -476,32 +519,37 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   changes; use `NMFMarker`, `NMFPolylineOverlay`, `NMFPolygonOverlay`, and `NMFCircleOverlay`
   for native content. Set `mapView` only after geometry is assigned, detach all objects by
   setting `mapView = null`, remove delegates before release, and use
-  `runNaverMapHostTeardown` for terminal cleanup.
+  `runNaverMapHostTeardown` for terminal cleanup. The injected native view factory/auth
+  configurator must make the ordering and one-view-per-surface assertions deterministic.
 
-- [ ] **Step 3: Implement the UIKit Compose surface**
+- [ ] **Step 5: Implement the UIKit Compose surface**
 
   In `NaverMapPlatform.ios.kt`, key the surface by `ncpKeyId`, remember the custom host/surface,
   dispose it from both `DisposableEffect` and `UIKitView.onRelease`, and forward state/content/
   `onError` updates to the coordinator. Keep all `NMF*`, `NMGLatLng`, `UIView`, and UIKit imports
-  in `iosMain`.
+  in `iosMain`; the deployment-target and compiler-argument configuration belongs to
+  `weft-map/navermap/build.gradle.kts` in Task 1, not to the platform source file.
 
-- [ ] **Step 4: Compile and link both Apple targets**
+- [ ] **Step 6: Compile and link both Apple targets**
 
   ```sh
   ./gradlew :weft-map:navermap:compileKotlinIosSimulatorArm64 \
     :weft-map:navermap:compileKotlinIosArm64 \
-    :weft-map:navermap:linkDebugFrameworkIosSimulatorArm64
+    :weft-map:navermap:linkDebugFrameworkIosSimulatorArm64 \
+    :weft-map:navermap:linkDebugFrameworkIosArm64
   ```
 
-  Expected: both Kotlin/Native targets compile and the framework links against the dynamic Naver
-  framework. If the Naver package cannot be imported or linked by the pinned Kotlin toolchain,
-  stop and record the exact compiler/linker error as a completion blocker; do not ship an Android-
-  only PR under the approved scope.
+  Expected: both Kotlin/Native targets compile and each framework links against the dynamic Naver
+  framework. If the Naver package cannot be imported or either target cannot link by the pinned
+  Kotlin toolchain, stop and record the exact compiler/linker error as a completion blocker; do not
+  ship an Android-only PR under the approved scope. Inspect both linked framework `Info.plist`
+  files and assert `MinimumOSVersion` remains `13.0`.
 
-- [ ] **Step 5: Commit the iOS native adapter and persisted package lock**
+- [ ] **Step 7: Commit the iOS native adapter, host tests, and persisted package lock**
 
   ```sh
-  git add weft-map/navermap/src/iosMain .swiftpm-locks/default/swiftImport/Package.resolved
+  git add weft-map/navermap/src/iosMain weft-map/navermap/src/iosTest \
+    .swiftpm-locks/default/swiftImport/Package.resolved
   git commit -m "feat: implement Naver iOS map adapter"
   ```
 
@@ -510,9 +558,16 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
 **Files:**
 - Create: `harness/fixtures/weft-navermap-consumer/settings.gradle.kts`
 - Create: `harness/fixtures/weft-navermap-consumer/build.gradle.kts`
+- Create: `harness/fixtures/weft-navermap-consumer/src/main/kotlin/consumer/NaverConsumer.kt`
 - Create: `harness/fixtures/weft-navermap-consumer/src/main/AndroidManifest.xml`
+- Create: `harness/fixtures/weft-navermap-consumer/README.md`
 - Create/modify: `harness/fixtures/weft-navermap-ios-consumer/README.md`
-- Create: `harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj/...` as generated by the existing linkage task
+- Create: `harness/fixtures/weft-navermap-ios-consumer/KotlinMultiplatformLinkedPackage/Package.swift`
+- Create: `harness/fixtures/weft-navermap-ios-consumer/KotlinMultiplatformLinkedPackage/Sources/KotlinMultiplatformLinkedPackage/KotlinMultiplatformLinkedPackage.m`
+- Create: `harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj/project.pbxproj`
+- Create: `harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj/xcshareddata/xcschemes/WeftNaverConsumer.xcscheme`
+- Create: `harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer/AppDelegate.swift`
+- Create: `harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer/Info.plist`
 - Modify: `scripts/test_weft.py` or fixture verification code only if the new fixture needs explicit coverage
 
 - [ ] **Step 1: Add the Android consumer fixture before relying on publication metadata**
@@ -520,8 +575,15 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   Use the existing Kakao consumer fixture shape, but depend on
   `implementation(platform("run.thespot.weft:weft-bom:${weftVersion.get()}"))` and
   `implementation("run.thespot.weft:weft-navermap")`. Add `maven("https://repository.map.naver.com/archive/maven")`
-  and `mavenLocal()` to the fixture repositories. Add a minimal Android manifest/application
-  declaration with the Naver `NCP_KEY_ID` metadata placeholder, without committing a real key.
+  and `mavenLocal()` to the fixture repositories. Apply the Kotlin Android plugin and add
+  `src/main/kotlin/consumer/NaverConsumer.kt` that references the public `NaverMap` entry point,
+  so `assemble` proves the provider API and BOM resolve at compile time. Add a minimal Android
+  manifest/application declaration with the Naver `NCP_KEY_ID` metadata placeholder, without
+  committing a real key.
+
+  The checked-in Android README must document the exact local publication commands, the fixture
+  `assemble` command, both `mavenLocal()` and the official Naver Maven repository, the placeholder
+  key policy, and that the fixture intentionally declares no direct Naver SDK dependency.
 
 - [ ] **Step 2: Resolve the Android fixture against local publication outputs**
 
@@ -539,7 +601,11 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
 - [ ] **Step 3: Generate and build the iOS consumer fixture**
 
   Configure the fixture's Xcode project to link `WeftNaverMap.framework` and the generated
-  SwiftPM linkage package. Run:
+  SwiftPM linkage package. Check in the project, target, scheme, app delegate, plist, and package
+  source files listed above; `integrateLinkagePackage` updates this existing project rather than
+  creating it. The persisted `Package.resolved` must pin the exact `SPM-NMapsMap` `3.24.1`
+  package/product (`NMapsMap`), and the generated package must deliver the vendor
+  `NMapsMap.framework` with its `Assets.car` resource. Run:
 
   ```sh
   XCODEPROJ_PATH="$PWD/harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj" \
@@ -549,8 +615,16 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   ```
 
   Expected: the app builds for the Apple Silicon simulator and includes the dynamic Naver
-  framework/resource bundle. On the Intel host, record compile/link results and the runtime test
-  skip; if the consumer cannot link, leave the branch blocked as required by the spec.
+  framework. Set `IPHONEOS_DEPLOYMENT_TARGET = 13.0` on the checked-in Xcode target. With
+  `APP=harness/fixtures/weft-navermap-ios-consumer/build/Build/Products/Debug-iphonesimulator/WeftNaverConsumer.app`,
+  assert `Frameworks/NMapsMap.framework/NMapsMap` is present and executable,
+  `Frameworks/NMapsMap.framework/Assets.car` is present, and
+  `file Frameworks/NMapsMap.framework/NMapsMap` identifies a dynamically linked Mach-O. Run
+  `/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Frameworks/NMapsMap.framework/Info.plist"`
+  and assert `13.0`; also assert the app contains `WeftNaverMap.framework` and that the NMapsMap
+  binary is delivered as its own framework rather than statically merged into the KMP framework.
+  On the Intel host, record compile/link results and the runtime test skip; if the consumer cannot
+  link, leave the branch blocked as required by the spec.
 
 - [ ] **Step 4: Commit consumer fixtures and documentation**
 
@@ -577,17 +651,32 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
 - [ ] **Step 2: Run repository checks after documentation and build changes**
 
   ```sh
+  ./scripts/verify.sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
   ./gradlew verify
-  ./scripts/verify.sh
+  ANDROID_HOME="$HOME/Library/Android/sdk" \
+  ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
+  ./gradlew :weft-map:navermap:compileKotlinIosSimulatorArm64 \
+    :weft-map:navermap:compileKotlinIosArm64 \
+    :weft-map:navermap:linkDebugFrameworkIosSimulatorArm64 \
+    :weft-map:navermap:linkDebugFrameworkIosArm64
+  XCODEPROJ_PATH="$PWD/harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj" \
+  ./gradlew :weft-map:navermap:integrateLinkagePackage
+  xcodebuild -project harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj \
+    -scheme WeftNaverConsumer -sdk iphonesimulator build
+  APP="harness/fixtures/weft-navermap-ios-consumer/build/Build/Products/Debug-iphonesimulator/WeftNaverConsumer.app"
+  test -x "$APP/Frameworks/NMapsMap.framework/NMapsMap"
+  test -f "$APP/Frameworks/NMapsMap.framework/Assets.car"
+  test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Frameworks/NMapsMap.framework/Info.plist")" = 13.0
   git diff --check
   ```
 
-  Expected: Gradle verification includes both provider leaves, BOM constraints, task-graph checks,
-  POM checks, and all available common/Android/iOS compile tests; the script reports `Weft
-  verification passed`. iOS runtime tests may report `SKIPPED` on `macos_x64`, but no iOS compile,
-  link, or consumer gate may be skipped without an explicit blocker.
+  Expected: the script reports `Weft verification passed`; Gradle verification includes both
+  provider leaves, BOM constraints, task-graph checks, POM checks, and all available common/Android
+  tests. The explicit Apple commands establish both iOS compile/link gates and the Xcode consumer
+  resource gate; iOS runtime tests may report `SKIPPED` on `macos_x64`, but no iOS compile, link,
+  or consumer gate may be skipped without an explicit blocker.
 
 - [ ] **Step 3: Commit fixture documentation**
 
@@ -606,12 +695,22 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
 - [ ] **Step 1: Inspect the complete diff and generated artifacts**
 
   ```sh
+  git fetch --all --prune
   git diff --stat origin/main...HEAD
   git diff --check origin/main...HEAD
+  git diff --name-only origin/main...HEAD
   git status --short
+  test -f .swiftpm-locks/default/swiftImport/Package.resolved
+  test -f harness/fixtures/weft-navermap-ios-consumer/KotlinMultiplatformLinkedPackage/Package.swift
+  test -f harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj/project.pbxproj
+  test -f harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj/xcshareddata/xcschemes/WeftNaverConsumer.xcscheme
+  ! git ls-files | rg '(^|/)(build|\.gradle|Pods|SourcePackages|\.swiftpm/checkouts)(/|$)|\.xcuserstate$'
   ```
 
-  Confirm no real SDK keys, local build outputs, or unrelated worktree changes are tracked.
+  Compare every changed path from `git diff --name-only` to the approved Task 1–9 file lists and
+  fail the review on any unlisted path. Confirm no real SDK keys, generated vendor checkouts,
+  local build outputs, or unrelated worktree changes are tracked; inspect the persisted SwiftPM
+  lock/package and Xcode fixture rather than accepting generated linkage output as source.
 
 - [ ] **Step 2: Dispatch an independent code reviewer**
 
@@ -626,28 +725,58 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   implement the smallest fix, rerun the focused test, then rerun the affected leaf check. Do not
   suppress a reviewer finding without recording the technical reason in the review report.
 
-- [ ] **Step 4: Run final verification before any completion claim**
+- [ ] **Step 4: Dispatch an independent re-review after every review fix**
+
+  After any fix, have the same independent reviewer (or a fresh independent reviewer if the first
+  is unavailable) re-inspect the updated `origin/main...HEAD` diff. Require an explicit disposition
+  for every original Critical/Important finding and a clean re-review with no unresolved
+  Critical/Important issues before proceeding. If no fixes were needed, retain the initial review
+  as the final review and record that no re-review was necessary.
+
+- [ ] **Step 5: Run final verification before any completion claim**
 
   ```sh
+  ./scripts/verify.sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
   ./gradlew :weft-core:check :weft-map:kakaomap:check :weft-map:navermap:check \
     verifyNaverMapPublication verifyWeftBomPublication verify
-  ./scripts/verify.sh
+  ANDROID_HOME="$HOME/Library/Android/sdk" \
+  ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
+  ./gradlew :weft-map:navermap:compileKotlinIosSimulatorArm64 \
+    :weft-map:navermap:compileKotlinIosArm64 \
+    :weft-map:navermap:linkDebugFrameworkIosSimulatorArm64 \
+    :weft-map:navermap:linkDebugFrameworkIosArm64
+  XCODEPROJ_PATH="$PWD/harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj" \
+  ./gradlew :weft-map:navermap:integrateLinkagePackage
+  xcodebuild -project harness/fixtures/weft-navermap-ios-consumer/WeftNaverConsumer.xcodeproj \
+    -scheme WeftNaverConsumer -sdk iphonesimulator build
+  APP="harness/fixtures/weft-navermap-ios-consumer/build/Build/Products/Debug-iphonesimulator/WeftNaverConsumer.app"
+  test -x "$APP/Frameworks/NMapsMap.framework/NMapsMap"
+  test -f "$APP/Frameworks/NMapsMap.framework/Assets.car"
+  test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Frameworks/NMapsMap.framework/Info.plist")" = 13.0
+  git diff --check origin/main...HEAD
+  git status --short
   ```
 
   Expected: every requested task exits successfully; iOS runtime tests may be skipped only because
-  of the known `macos_x64` host limitation, while iOS compile/link and consumer evidence remain
-  recorded.
+  of the known `macos_x64` host limitation, while iOS compile/link, dynamic-framework/resource,
+  and consumer evidence remain recorded. Re-run the generated-artifact and changed-path allowlist
+  inspection from Step 1 after all fixes.
 
-- [ ] **Step 5: Write the review report and commit it**
+- [ ] **Step 6: Write the review report and commit it**
+
+  The report must record the base and head commits, exact verification commands and outcomes,
+  iOS compile/link/consumer gate status (or the exact blocker), every Critical/Important/Minor
+  finding with its disposition, regression-test evidence for fixes, and the final assessment of
+  branch readiness. Include the final changed-path/generated-artifact inspection result.
 
   ```sh
   git add docs/superpowers/reviews/2026-11-26-weft-map-navermap-review.md
   git commit -m "docs: record Naver map provider review"
   ```
 
-- [ ] **Step 6: Stop before publication/merge unless explicitly requested**
+- [ ] **Step 7: Stop before publication/merge unless explicitly requested**
 
   Report the branch, commits, verification commands/results, PR readiness, and any iOS platform
   blocker. Do not publish to Maven Central. Do not merge the GitHub PR unless the user explicitly
