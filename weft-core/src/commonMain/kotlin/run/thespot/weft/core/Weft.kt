@@ -22,7 +22,8 @@ import kotlin.reflect.KClass
  *
  * Registration is declarative: [install] applies the configuration block immediately and records
  * the prepared instance. Every plugin's [WeftPlugin.install] hook runs when the [Weft] instance is
- * built, after the registry is complete.
+ * built, after the registry is complete. Multi-module applications can instead pass a collection
+ * of [WeftContribution] instances to [Weft]; each capability module then owns its registration.
  */
 public class WeftConfig internal constructor() {
     private val pendingInstalls: MutableList<PendingInstall> = mutableListOf()
@@ -76,6 +77,22 @@ public class WeftConfig internal constructor() {
  * family fails here instead of at first use.
  */
 public fun Weft(block: WeftConfig.() -> Unit): Weft = WeftConfig().apply(block).createWeft()
+
+/**
+ * Creates and configures a [Weft] runtime from capability-module [contributions].
+ *
+ * Each contribution adds its plugin registrations to the same [WeftConfig], so duplicate
+ * capability implementations still fail before any plugin's [WeftPlugin.install] hook runs. The
+ * contribution order determines health-check ordering; plugin install hooks run after every
+ * contribution has completed.
+ *
+ * This overload is DI-framework agnostic. An application can collect contributions with Koin or
+ * pass them directly from another composition mechanism.
+ */
+public fun Weft(contributions: Iterable<WeftContribution>): Weft =
+    WeftConfig().apply {
+        contributions.forEach { contribution -> contribution.install(this) }
+    }.createWeft()
 
 /**
  * Runtime registry of installed Weft plugins.

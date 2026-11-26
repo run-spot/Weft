@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login and push remain build/publication scaffolding. These libraries are not yet published.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login now includes Supabase Auth PKCE and Android Restore Credentials; push includes Firebase registration and Android/iOS notification presentation. Separate consumer and device validation remain release gates for those modules. These libraries are not yet published.
 
 ## Start here
 
@@ -60,15 +60,40 @@ coordinated release until the versioned remote `WeftLiveKit` package and an exte
 consumer have passed. It can be included only through the explicit `weftLiveReleaseEnabled=true`
 release gate.
 
-Capabilities are installed in one place through `:weft-core`, and a capability family such as maps exposes one plugin type so that its implementations are interchangeable:
+Each capability module owns a `WeftContribution`. In a multi-module app, Koin collects those contributions and one app module creates the runtime:
+
+~~~kotlin
+@Module
+@Configuration
+class AppWeftModule {
+    @Single
+    fun weft(contributions: List<WeftContribution>): Weft = Weft(contributions)
+}
+
+@KoinApplication
+class AppKoinApplication
+
+startKoin<AppKoinApplication> {
+    properties(
+        mapOf(
+            "weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey,
+            "weft.login.supabaseUrl" to supabaseUrl,
+            "weft.login.publishableKey" to supabasePublishableKey,
+            "weft.login.redirectUri" to loginRedirectUri,
+        ),
+    )
+}
+val weft = KoinPlatform.getKoin().get<Weft>()
+~~~
+
+The Koin Compiler Plugin discovers configured modules on the application classpath. Kakao Maps and Supabase login contribute their own installs and read public configuration from Koin properties. Firebase push contributes its default message policy; an app can provide a `PushMessageProcessor` definition to customize it. `weft-live` also contributes its plugin when included, and requires the app to provide a platform-specific `LiveActivityPlatform`. A consumer that does not use Koin can continue using the direct `Weft` DSL:
 
 ~~~kotlin
 val weft = Weft {
     install(KakaoMap) {
-        nativeAppKey = "kakao-native-app-key"
+        nativeAppKey = kakaoNativeAppKey
     }
 }
-
 val mapPlugin = weft.get<MapPlugin>()
 ~~~
 
@@ -113,7 +138,15 @@ plugins {
 }
 ~~~
 
-`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), when an `install(...)` block configures a credential as an empty or placeholder string, or when client code contains a credential that must not ship — a Supabase `service_role` JWT, a provider secret token (`sk-`, `ghp_`, `AKIA...`, `xox[baprs]-`, a private key block), or a privileged property such as `serviceRoleKey`. A finding reports only the category and `file:line`; the token never appears in the build output. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
+`verifyWeftPlugins` is offline and part of `check`: it fails when a required `.get<T>()` has no installed plugin (naming the type and every `file:line`), when an `install(...)` block configures a credential as an empty or placeholder string, or when client code contains a credential that must not ship — a Supabase `service_role` JWT, a provider secret token (`sk-`, `ghp_`, `AKIA...`, `xox[baprs]-`, a private key block), or a privileged property such as `serviceRoleKey` in an install block or Koin property. A finding reports only the category and `file:line`; the token never appears in the build output. Since the verifier does not inspect compiled contributions from dependencies, list their capability types in the verifier's `installedTypes` metadata:
+
+~~~kotlin
+weft {
+    installedTypes.add("MapPlugin")
+}
+~~~
+
+This declaration is only for static analysis; runtime installation still comes from Koin. `verifyWeftHealth` runs the health checks instead, and fails when a credential is blank, rejected (401/403), or the endpoint is unreachable.
 
 `verifyWeftDependencies` enforces the direct-dependency allowlist. It is opt-in, because adopting it is a policy decision:
 

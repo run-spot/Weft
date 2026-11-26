@@ -14,9 +14,16 @@ val weft = Weft {
 val push = weft.get<PushPlugin>()
 ~~~
 
+For a multi-module app using Koin, `weft-push` publishes a discovered contribution so the app can
+aggregate it with the other capabilities. It uses `DefaultPushMessageProcessor` unless the app
+provides a `PushMessageProcessor` definition, which keeps app-specific message policy outside the
+library. See the [shared contribution assembly](library-modules.md#plugin-installation-model).
+
 `PushPlugin.registrationId` is a `StateFlow<PushRegistrationId?>`. Collect it and upload changed identifiers to the app's backend. Firebase's recommended identifier is a Firebase Installation ID (FID); do not log or treat it as a user credential. `register()` requests provider registration and the ID arrives through the state flow. `unregister()` disables the current FCM registration, clears the local value, and does not delete the FID or an app-server record.
 
 `PushPlugin.notifications` is a hot `Flow<PushNotification>` without replay. A collector sees messages delivered while it is collecting. Notifications are not persisted across process death, and tapping a system notification is not replayed as a received event. The model contains the provider message ID, type, alert title/body, route, timestamp, and string-valued custom data when supplied.
+
+The iOS adapter pins Firebase Apple SDK 13.2.0. Its official Swift package manifest requires Xcode 26.2 or later, which includes Swift 6.2.3; the Apple CI job selects Xcode 26.2 on the `macos-26` runner. ([Firebase package manifest](https://github.com/firebase/firebase-ios-sdk/blob/13.2.0/Package.swift), reviewed 2026-11-26; [GitHub macOS 26 runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md), reviewed 2026-11-26.)
 
 `PushRemoteMessage` is the normalized input to `PushMessageProcessor`. `DefaultPushMessageProcessor` displays a message when it has a non-blank title or body and ignores payloads without visible text. Configure an app-specific common policy through `FirebasePush { messageProcessor = ... }`. A processor can route message types, choose a channel/group, change displayed text, or ignore the message. The result is a `PushNotificationRequest`; `PushPlugin.showNotification`, `cancelNotification`, and `cancelAllNotifications` use the platform notification service.
 

@@ -7,6 +7,8 @@
 ## Provider: Kakao Maps
 
 - Keep Android SDK, UIKit, and provider SDK types out of `commonMain`.
+- Publish the Kakao capability's Koin registration as a `WeftContribution` in `commonMain`; apply `weft.koin` here and keep Koin annotations and contribution construction in this leaf, not in `:weft-core`.
+- Read the public native app key from the consuming app's Koin property `weft.kakaoMap.nativeAppKey`; do not put the key value in the library or generated annotation metadata.
 - Add dependencies only to the source set that needs them.
 - Keep the Kakao Maven repository and Android SDK dependency in the Kakao leaf configuration.
 - The iOS adapter imports Kakao Maps SDK 2.12.19 through the Kotlin SwiftPM integration and supports iOS 13.0.

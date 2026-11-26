@@ -22,6 +22,7 @@ internal object DependencyWhitelist {
         "org.jetbrains.compose",
         "org.jetbrains.kotlinx",
         "io.ktor",
+        "io.insert-koin",
         "androidx.*",
         "com.google.*",
     )

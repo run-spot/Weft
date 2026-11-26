@@ -5,6 +5,7 @@ This included build provides the convention plugins used by the Weft modules:
 - `weft.kmp-library` — Kotlin Multiplatform Android and Apple targets, explicit API mode, and shared host-test defaults for the published libraries.
 - `weft.maven-publish` — Maven Central coordinates, POM metadata, and signing for the published libraries and BOM.
 - `weft.compose` — the Compose compiler for a module that uses Compose API (`:weft-core`).
+- `weft.koin` — the Koin Compiler Plugin for modules that declare Koin-annotated capability contributions.
 - `weft.jvm` — a JVM Gradle-plugin module (Kotlin JVM plus `java-gradle-plugin`, JDK 17 toolchain, `kotlin("test")` and Gradle TestKit on the test classpath).
 
 Version pins live in `../gradle/libs.versions.toml`; shared Android defaults and the publication group live in the repository `gradle.properties`. Maven artifact IDs use the `weft-` prefix.

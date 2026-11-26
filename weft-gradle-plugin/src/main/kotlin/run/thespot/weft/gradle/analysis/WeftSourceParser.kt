@@ -21,7 +21,8 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
             installs = installs.map { it.site },
             lookups = parseLookups(),
             healthChecks = parseHealthChecks(),
-            secretIssues = parseSecrets() + installs.flatMap { it.forbiddenProperties },
+            secretIssues = parseSecrets() + parseForbiddenKoinProperties() +
+                installs.flatMap { it.forbiddenProperties },
         )
     }
 
@@ -35,6 +36,48 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
      * only the category and position, never the value.
      */
     private fun parseSecrets(): List<SecretIssue> = SecretRules.scan(file.path, text)
+
+    /** Rejects privileged property names used by Koin annotations or client property maps. */
+    private fun parseForbiddenKoinProperties(): List<SecretIssue> {
+        val issues = mutableListOf<SecretIssue>()
+
+        fun addIfForbidden(property: String?, offset: Int) {
+            if (property == null || !SecretRules.isForbiddenClientProperty(property)) return
+            issues += SecretIssue(
+                rule = SecretRule.FORBIDDEN_CLIENT_PROPERTY,
+                location = file.locationAt(offset),
+                property = property,
+            )
+        }
+
+        for (match in koinPropertyAnnotationRegex.findAll(clean)) {
+            val open = clean.indexOf('(', match.range.first)
+            val close = SourceText.findMatching(clean, open, '(', ')') ?: continue
+            val argument = SourceText.splitTopLevel(clean, open + 1, close).firstOrNull() ?: continue
+            val literalStart = skipBlanks(argument.start)
+            val (literal, _) = readLiteralAt(literalStart) ?: continue
+            addIfForbidden(literal.value, literalStart)
+        }
+
+        for (match in koinPropertiesRegex.findAll(clean)) {
+            val propertiesOpen = clean.indexOf('(', match.range.first)
+            val propertiesClose = SourceText.findMatching(clean, propertiesOpen, '(', ')') ?: continue
+            val propertiesBody = clean.substring(propertiesOpen + 1, propertiesClose)
+            val mapMatch = mapOfRegex.find(propertiesBody) ?: continue
+            val mapOpen = propertiesOpen + 1 + propertiesBody.indexOf('(', mapMatch.range.first)
+            val mapClose = SourceText.findMatching(clean, mapOpen, '(', ')') ?: continue
+
+            for (entry in SourceText.splitTopLevel(clean, mapOpen + 1, mapClose)) {
+                val entryText = clean.substring(entry.start, entry.end)
+                val separator = topLevelToSeparator(entryText) ?: continue
+                val keyEnd = entry.start + separator
+                val property = literalValueAt(entry.start, keyEnd) ?: continue
+                addIfForbidden(property, skipBlanks(entry.start))
+            }
+        }
+
+        return issues
+    }
 
     // endregion
 
@@ -333,6 +376,10 @@ internal class WeftSourceParser(private val file: KotlinSourceFile) {
         val healthCheckRegex = Regex("""\bWeftHealthCheck\s*\(""")
         val assignmentRegex = Regex("""([A-Za-z_][A-Za-z0-9_]*)\s*=""")
         val namedArgumentRegex = Regex("""^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=""")
+        val koinPropertyAnnotationRegex =
+            Regex("""@\s*(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?:Property|PropertyValue)\s*\(""")
+        val koinPropertiesRegex = Regex("""\bproperties\s*\(""")
+        val mapOfRegex = Regex("""\bmapOf\s*\(""")
         val declarationStarters = listOf(
             "class ", "object ", "interface ", "fun ", "val ", "var ", "private ", "internal ",
             "public ", "protected ", "open ", "abstract ", "@", "import ", "package ", "enum ",
