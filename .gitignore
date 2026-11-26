@@ -2,6 +2,7 @@
 .gradle/
 .kotlin/
 build/
+.build/
 out/
 .idea/
 __pycache__/
