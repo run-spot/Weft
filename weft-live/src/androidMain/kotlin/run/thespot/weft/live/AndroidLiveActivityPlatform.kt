@@ -40,6 +40,12 @@ public class AndroidLiveActivityPlatform(
         require(channelId.isNotBlank()) { "channelId must not be blank" }
         require(channelName.isNotBlank()) { "channelName must not be blank" }
         require(smallIconResId > 0) { "smallIconResId must be a valid drawable resource" }
+        require(
+            runCatching { applicationContext.resources.getResourceTypeName(smallIconResId) }
+                .getOrNull() in setOf("drawable", "mipmap"),
+        ) {
+            "smallIconResId must reference an existing drawable or mipmap resource"
+        }
     }
 
     override fun availability(): LiveActivityAvailability = androidLiveActivityAvailability(
@@ -172,6 +178,8 @@ public class AndroidLiveActivityPlatform(
                 message = "Android rejected the live activity notification permission.",
                 cause = error,
             )
+        } catch (error: LiveActivityException) {
+            throw error
         } catch (error: Exception) {
             throw platformFailure(
                 message = "Android failed to post live activity '${activity.id}'.",
@@ -196,6 +204,7 @@ public class AndroidLiveActivityPlatform(
 
     @Suppress("NewApi")
     private fun buildNotification(activity: LiveActivity): Notification {
+        var contentInfo: String? = null
         val builder = if (Build.VERSION.SDK_INT >= 26) {
             Notification.Builder(applicationContext, channelId)
         } else {
@@ -225,7 +234,7 @@ public class AndroidLiveActivityPlatform(
                     builder.setShowWhen(true)
                 }
                 activity.endsAtEpochMillis?.let { endsAt ->
-                    builder.setContentInfo("ETA ${formatTime(endsAt)}")
+                    contentInfo = "ETA ${formatTime(endsAt)}"
                 }
             }
             LiveActivityStatus.Completed,
@@ -245,7 +254,8 @@ public class AndroidLiveActivityPlatform(
         activity.progress?.let { progress ->
             builder
                 .setProgress(100, progress.percentage, false)
-                .setContentInfo("${progress.current}/${progress.total} (${progress.percentage}%)")
+            val progressInfo = "${progress.current}/${progress.total} (${progress.percentage}%)"
+            contentInfo = listOfNotNull(contentInfo, progressInfo).joinToString(" · ")
 
             if (androidLiveActivityRenderMode(Build.VERSION.SDK_INT, activity.status, hasProgress = true) ==
                 AndroidLiveActivityRenderMode.ProgressStyle
@@ -261,6 +271,8 @@ public class AndroidLiveActivityPlatform(
                 }
             }
         }
+
+        contentInfo?.let(builder::setContentInfo)
 
         return builder.build()
     }

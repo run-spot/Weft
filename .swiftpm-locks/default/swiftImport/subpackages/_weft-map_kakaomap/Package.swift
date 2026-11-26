@@ -3,7 +3,7 @@ import PackageDescription
 let package = Package(
   name: "_weft-map_kakaomap",
   platforms: [
-    .iOS("15.0")
+    .iOS("16.1")
   ],
   products: [
     .library(

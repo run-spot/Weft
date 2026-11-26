@@ -4,12 +4,28 @@ allprojects {
 }
 
 val weftLibraryProjects = listOf(":weft-core", ":weft-map:kakaomap", ":weft-login", ":weft-push")
+val weftLiveReleaseEnabled = providers.gradleProperty("weftLiveReleaseEnabled")
+    .map(String::toBoolean)
+    .orElse(false)
+val weftVerificationProjects = weftLibraryProjects + ":weft-live"
+val weftReleasePublishTasks = buildList {
+    addAll(
+        listOf(
+            ":weft-core:publishToMavenCentral",
+            ":weft-map:kakaomap:publishToMavenCentral",
+            ":weft-login:publishToMavenCentral",
+            ":weft-push:publishToMavenCentral",
+            ":weft-bom:publishToMavenCentral",
+        ),
+    )
+    if (weftLiveReleaseEnabled.get()) add(":weft-live:publishToMavenCentral")
+}
 
 tasks.register("verify") {
     group = "verification"
     description = "Checks every published Weft library leaf, plugin, BOM, and publication metadata."
 
-    dependsOn(weftLibraryProjects.map { "$it:check" })
+    dependsOn(weftVerificationProjects.map { "$it:check" })
     dependsOn(":weft-bom:check", ":weft-gradle-plugin:check")
 
     val kmpPublicationChecks = listOf(
@@ -18,7 +34,7 @@ tasks.register("verify") {
         "checkPomFileForIosArm64Publication",
         "checkPomFileForIosSimulatorArm64Publication",
     )
-    weftLibraryProjects.forEach { libraryPath ->
+    weftVerificationProjects.forEach { libraryPath ->
         // Native cinterop targets can be disabled on hosts without the required toolchain
         // (for example, Kakao's iOS targets on Linux). Depend on the publication checks
         // registered by each leaf instead of resolving absent platform task paths.
@@ -110,7 +126,11 @@ tasks.register("verifyWeftBomPublication") {
                 directChildText(dependency, "version"),
             ).joinToString(":")
         }
-        val expected = listOf("weft-core", "weft-kakaomap", "weft-login", "weft-push")
+        val expectedArtifacts = buildList {
+            addAll(listOf("weft-core", "weft-kakaomap", "weft-login", "weft-push"))
+            if (weftLiveReleaseEnabled.get()) add("weft-live")
+        }
+        val expected = expectedArtifacts
             .map { artifact -> "$expectedGroup:$artifact:$expectedVersion" }
         check(actual.sorted() == expected.sorted()) {
             "Weft BOM constraints differ. Expected $expected but found $actual"
@@ -120,6 +140,10 @@ tasks.register("verifyWeftBomPublication") {
 
 gradle.taskGraph.whenReady {
     val taskPaths = allTasks.map { it.path }.toSet()
+    val livePublishRequested = taskPaths.any { it.startsWith(":weft-live:publish") }
+    check(!livePublishRequested || weftLiveReleaseEnabled.get()) {
+        "Direct :weft-live publication is disabled until weftLiveReleaseEnabled=true."
+    }
     if (":verify" in taskPaths) {
         check(":weft-map:check" !in taskPaths) {
             "Root verification must not request the :weft-map namespace check task."
@@ -135,17 +159,14 @@ gradle.taskGraph.whenReady {
         check(":weft-map:kakaomap:publishToMavenCentral" in taskPaths) {
             "Release staging must publish the :weft-map:kakaomap leaf."
         }
+        check((":weft-live:publishToMavenCentral" in taskPaths) == weftLiveReleaseEnabled.get()) {
+            "Coordinated live publication must match weftLiveReleaseEnabled."
+        }
     }
 }
 
 tasks.register("publishWeftReleaseToMavenCentral") {
     group = "publishing"
     description = "Stages the Weft libraries and BOM together for a coordinated release."
-    dependsOn(
-        ":weft-core:publishToMavenCentral",
-        ":weft-map:kakaomap:publishToMavenCentral",
-        ":weft-login:publishToMavenCentral",
-        ":weft-push:publishToMavenCentral",
-        ":weft-bom:publishToMavenCentral",
-    )
+    dependsOn(weftReleasePublishTasks)
 }

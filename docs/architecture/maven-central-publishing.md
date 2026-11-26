@@ -1,13 +1,15 @@
 # Maven Central Publishing
 
-This repository prepares four Kotlin Multiplatform Maven Central publications and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
+This repository prepares four default Kotlin Multiplatform Maven Central publications, one verified
+live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication,
+but no artifact has been published.
 
 ## Build configuration
 
 - `build-logic` applies one KMP convention to each library and shared Maven publication metadata to all artifacts.
 - `GROUP` is `run.thespot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
-- The KMP leaves publish `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`, with Android and iOS target publications. `:weft-map` is a namespace parent; `:weft-map:kakaomap` owns the `weft-kakaomap` artifact.
-- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the four KMP artifacts to the same release version.
+- The default KMP leaves publish `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`, with Android and iOS target publications. `:weft-map` is a namespace parent; `:weft-map:kakaomap` owns the `weft-kakaomap` artifact. `:weft-live` is always verified but remains a candidate.
+- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the default four KMP artifacts to the same release version. It includes `weft-live` only when `weftLiveReleaseEnabled=true` is explicitly enabled.
 - POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
 - `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
 
@@ -55,6 +57,12 @@ dependencies {
 The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map:kakaomap`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
 
 The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
+
+The root `verify` task always checks `:weft-live` and its four target POMs. With the default
+`weftLiveReleaseEnabled=false`, the BOM and coordinated publish task omit it, and any direct live
+publication task fails during task-graph validation. Set the property to `true` only after the
+versioned remote SwiftPM source, external app/widget consumer, and Apple CI gates pass; the publish
+workflow forwards the checked-in property explicitly.
 
 ## Required GitHub Actions configuration
 

@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. Login and push remain build/publication scaffolding. These libraries are not yet published.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login and push remain build/publication scaffolding. These libraries are not yet published.
 
 ## Start here
 
@@ -44,15 +44,21 @@ The scaffold records architecture choices and creates the planned module tree. E
 
 ## Build the bridge libraries
 
-The Gradle workspace includes Kotlin Multiplatform libraries for the plugin core, map, login, and push notifications, plus a Java Platform BOM that aligns their versions. Their initial artifact coordinates are:
+The Gradle workspace includes Kotlin Multiplatform libraries for the plugin core, map, login, push notifications, and a gated live-activity candidate, plus a Java Platform BOM that aligns their versions. Their initial artifact coordinates are:
 
 ~~~text
 run.thespot.weft:weft-core:0.1.0-SNAPSHOT
 run.thespot.weft:weft-kakaomap:0.1.0-SNAPSHOT
 run.thespot.weft:weft-login:0.1.0-SNAPSHOT
 run.thespot.weft:weft-push:0.1.0-SNAPSHOT
+run.thespot.weft:weft-live:0.1.0-SNAPSHOT  # candidate; excluded from the default BOM
 run.thespot.weft:weft-bom:0.1.0-SNAPSHOT
 ~~~
+
+The live-activity candidate is verified with the workspace but is omitted from the default BOM and
+coordinated release until the versioned remote `WeftLiveKit` package and an external app/widget
+consumer have passed. It can be included only through the explicit `weftLiveReleaseEnabled=true`
+release gate.
 
 Capabilities are installed in one place through `:weft-core`, and a capability family such as maps exposes one plugin type so that its implementations are interchangeable:
 
@@ -156,7 +162,10 @@ dependencyResolutionManagement {
 }
 ~~~
 
-The `run.thespot` Central namespace must be verified before the first release. The map API and platform adapters are implemented, but the bridge baseline remains a candidate until CI and a published consumer validate the full target set. See the module instructions and [toolchain policy](docs/architecture/toolchain-policy.md).
+The `run.thespot` Central namespace must be verified before the first release. The map API and
+platform adapters are implemented, and the live-activity candidate is locally verified, but the
+bridge release baseline remains a candidate until CI and published consumers validate the full
+target set. See the module instructions and [toolchain policy](docs/architecture/toolchain-policy.md).
 
 ~~~bash
 ./gradlew projects

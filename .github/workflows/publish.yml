@@ -42,4 +42,10 @@ jobs:
             *) echo "Unsupported release tag: $GITHUB_REF_NAME" >&2; exit 1 ;;
           esac
           test -n "$VERSION"
-          ./gradlew "-PVERSION_NAME=$VERSION" "-PPOM_DEVELOPER_EMAIL=$WEFT_DEVELOPER_EMAIL" publishWeftReleaseToMavenCentral
+          LIVE_RELEASE_ENABLED="$(awk -F= '$1 == "weftLiveReleaseEnabled" { print $2 }' gradle.properties | tr -d '[:space:]')"
+          case "$LIVE_RELEASE_ENABLED" in
+            true|false) ;;
+            *) echo "gradle.properties must define weftLiveReleaseEnabled as true or false." >&2; exit 1 ;;
+          esac
+          ./gradlew "-PVERSION_NAME=$VERSION" "-PPOM_DEVELOPER_EMAIL=$WEFT_DEVELOPER_EMAIL" \
+            "-PweftLiveReleaseEnabled=$LIVE_RELEASE_ENABLED" publishWeftReleaseToMavenCentral

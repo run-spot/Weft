@@ -51,6 +51,42 @@ class AndroidLiveActivityPlatformTest {
                 channelDisabled = false,
             ),
         )
+        assertEquals(
+            LiveActivityAvailability.Available,
+            androidLiveActivityAvailability(
+                sdkInt = 25,
+                runtimePermissionGranted = false,
+                notificationsEnabled = true,
+                channelDisabled = false,
+            ),
+        )
+        assertEquals(
+            LiveActivityAvailability.Available,
+            androidLiveActivityAvailability(
+                sdkInt = 32,
+                runtimePermissionGranted = false,
+                notificationsEnabled = true,
+                channelDisabled = false,
+            ),
+        )
+        assertEquals(
+            LiveActivityAvailability.PermissionRequired,
+            androidLiveActivityAvailability(
+                sdkInt = 35,
+                runtimePermissionGranted = false,
+                notificationsEnabled = true,
+                channelDisabled = false,
+            ),
+        )
+        assertEquals(
+            LiveActivityAvailability.Disabled,
+            androidLiveActivityAvailability(
+                sdkInt = 36,
+                runtimePermissionGranted = true,
+                notificationsEnabled = false,
+                channelDisabled = false,
+            ),
+        )
     }
 
     @Test

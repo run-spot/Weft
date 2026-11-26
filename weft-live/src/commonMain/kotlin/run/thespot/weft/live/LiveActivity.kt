@@ -160,16 +160,27 @@ private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' ||
 
 private fun isValidAuthority(authority: String): Boolean {
     if (authority.isEmpty() || authority.any { !it.isAuthorityChar() }) return false
+    if (authority.indexOf('@') != authority.lastIndexOf('@')) return false
+
+    val userInfoEnd = authority.indexOf('@')
+    val userInfo = if (userInfoEnd >= 0) authority.substring(0, userInfoEnd) else null
+    if (userInfo != null && !userInfo.all { it.isUnreserved() || it.isSubDelimiter() || it == ':' || it == '%' }) {
+        return false
+    }
+
     val hostPort = authority.substringAfterLast('@')
     if (hostPort.isEmpty()) return false
 
     if (hostPort.startsWith('[')) {
         val closingBracket = hostPort.indexOf(']')
         if (closingBracket <= 1) return false
+        if (hostPort.substring(1, closingBracket).any { it == '[' || it == ']' }) return false
         val suffix = hostPort.substring(closingBracket + 1)
         return suffix.isEmpty() ||
             (suffix.startsWith(':') && suffix.length > 1 && suffix.drop(1).all(Char::isDigit))
     }
+
+    if (hostPort.any { it == '[' || it == ']' }) return false
 
     val firstColon = hostPort.indexOf(':')
     if (firstColon == -1) return true

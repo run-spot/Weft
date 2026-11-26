@@ -48,6 +48,12 @@ class LiveActivityTest {
             LiveActivity("id", "title", deepLink = "weft://bad^host/path")
         }
         assertFailsWith<IllegalArgumentException> {
+            LiveActivity("id", "title", deepLink = "weft://host]path")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LiveActivity("id", "title", deepLink = "weft://user@@host/path")
+        }
+        assertFailsWith<IllegalArgumentException> {
             LiveActivity("id", "title", deepLink = "weft://host/[]")
         }
         assertFailsWith<IllegalArgumentException> {
