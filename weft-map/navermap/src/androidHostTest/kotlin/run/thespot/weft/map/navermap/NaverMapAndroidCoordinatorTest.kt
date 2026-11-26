@@ -453,7 +453,7 @@ class NaverMapAndroidCoordinatorTest {
     @Test
     fun reportsSdkFactoryFailureThroughOnErrorAndReturnsPlaceholderView() {
         val secretKey = "secret-ncp-key"
-        val sdkFailure = IllegalStateException("SDK initialization failed")
+        val sdkFailure = IllegalStateException("SDK initialization failed for $secretKey")
         val errors = mutableListOf<Throwable>()
         var factoryCalled = false
         val surface = NaverMapAndroidSurface(
@@ -474,7 +474,8 @@ class NaverMapAndroidCoordinatorTest {
         assertFalse(factoryCalled)
         assertEquals(1, errors.size)
         assertFalse(errors.single().toString().contains(secretKey))
-        assertSame(sdkFailure, errors.single().cause)
+        assertNull(errors.single().cause)
+        assertFalse(errors.single().stackTraceToString().contains(secretKey))
     }
 
     @Test

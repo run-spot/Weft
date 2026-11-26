@@ -322,12 +322,11 @@ internal class NaverMapAndroidSurface(
         check(!finished) { "Naver Maps Android surface is finished." }
         return try {
             createViewOrThrow(context)
-        } catch (failure: Throwable) {
+        } catch (_: Throwable) {
             finished = true
             initialOnError?.invoke(
                 NaverMapException(
                     "Naver Maps Android surface initialization failed.",
-                    failure,
                 ),
             )
             View(context)
