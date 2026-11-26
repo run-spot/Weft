@@ -29,6 +29,8 @@ internal class NaverMapAndroidNativeHandleRegistry<T>(
 
     internal fun remove(nativeId: String): T? = handles.remove(nativeId)
 
+    internal fun snapshot(): Map<String, T> = handles.toMap()
+
     internal fun retain(nativeIds: Set<String>) {
         handles.entries
             .filterNot { it.key in nativeIds }
@@ -56,7 +58,7 @@ internal interface NaverMapAndroidMarkerLayer {
     fun remove(native: NaverMapAndroidNativeMarker, nativeId: String)
 
     /** Rebuild the complete committed marker snapshot after a partial native mutation. */
-    fun restore(markers: List<MapMarker>)
+    fun restore(markers: List<MapMarker>): Map<String, NaverMapAndroidNativeMarker>
 }
 
 internal interface NaverMapAndroidShapeLayer {
@@ -67,7 +69,7 @@ internal interface NaverMapAndroidShapeLayer {
     fun remove(native: NaverMapAndroidNativeShape, nativeId: String)
 
     /** Rebuild the complete committed shape snapshot after a partial native mutation. */
-    fun restore(shapes: List<NaverMapAndroidShape>)
+    fun restore(shapes: List<NaverMapAndroidShape>): Map<String, NaverMapAndroidNativeShape>
 }
 
 internal object NaverMapAndroidEmptyMarkerLayer : NaverMapAndroidMarkerLayer {
@@ -76,8 +78,8 @@ internal object NaverMapAndroidEmptyMarkerLayer : NaverMapAndroidMarkerLayer {
     }
     override fun add(marker: MapMarker): NaverMapAndroidNativeMarker = Handle
     override fun update(native: NaverMapAndroidNativeMarker, marker: MapMarker) = Unit
-    override fun remove(native: NaverMapAndroidNativeMarker, markerId: String) = Unit
-    override fun restore(markers: List<MapMarker>) = Unit
+    override fun remove(native: NaverMapAndroidNativeMarker, nativeId: String) = Unit
+    override fun restore(markers: List<MapMarker>): Map<String, NaverMapAndroidNativeMarker> = emptyMap()
 }
 
 internal object NaverMapAndroidEmptyShapeLayer : NaverMapAndroidShapeLayer {
@@ -86,8 +88,8 @@ internal object NaverMapAndroidEmptyShapeLayer : NaverMapAndroidShapeLayer {
     }
     override fun add(shape: NaverMapAndroidShape): NaverMapAndroidNativeShape = Handle
     override fun update(native: NaverMapAndroidNativeShape, shape: NaverMapAndroidShape) = Unit
-    override fun remove(native: NaverMapAndroidNativeShape, shapeId: String) = Unit
-    override fun restore(shapes: List<NaverMapAndroidShape>) = Unit
+    override fun remove(native: NaverMapAndroidNativeShape, nativeId: String) = Unit
+    override fun restore(shapes: List<NaverMapAndroidShape>): Map<String, NaverMapAndroidNativeShape> = emptyMap()
 }
 
 internal sealed interface NaverMapAndroidShape {
@@ -128,8 +130,8 @@ internal class NaverMapAndroidOverlayReconciler(
     private val shapeLayer: NaverMapAndroidShapeLayer,
     private val style: NaverMapAndroidOverlayStyle,
 ) {
-    private var markerHandles = linkedMapOf<String, NaverMapAndroidNativeMarker>()
-    private var shapeHandles = linkedMapOf<String, NaverMapAndroidNativeShape>()
+    private var markerHandles: MutableMap<String, NaverMapAndroidNativeMarker> = linkedMapOf()
+    private var shapeHandles: MutableMap<String, NaverMapAndroidNativeShape> = linkedMapOf()
     private var committed = NaverMapAndroidOverlaySnapshot(emptyList(), emptyList())
     private var layerSynchronized = true
 
@@ -139,9 +141,14 @@ internal class NaverMapAndroidOverlayReconciler(
     internal fun render(content: MapContent) {
         val next = content.toNaverSnapshot(style)
         if (!layerSynchronized) {
-            restoreLayersOrThrow(next)
-            committed = next
-            layerSynchronized = true
+            try {
+                restoreLayersOrThrow(next)
+                committed = next
+                layerSynchronized = true
+            } catch (failure: Throwable) {
+                layerSynchronized = false
+                throw failure
+            }
             return
         }
 
@@ -232,13 +239,15 @@ internal class NaverMapAndroidOverlayReconciler(
     private fun restoreLayers(snapshot: NaverMapAndroidOverlaySnapshot): List<Throwable> {
         val failures = mutableListOf<Throwable>()
         try {
-            markerLayer.restore(snapshot.markers)
+            markerHandles = markerLayer.restore(snapshot.markers).toMutableMap()
         } catch (failure: Throwable) {
+            markerHandles.clear()
             failures += failure
         }
         try {
-            shapeLayer.restore(snapshot.shapes)
+            shapeHandles = shapeLayer.restore(snapshot.shapes).toMutableMap()
         } catch (failure: Throwable) {
+            shapeHandles.clear()
             failures += failure
         }
         return failures

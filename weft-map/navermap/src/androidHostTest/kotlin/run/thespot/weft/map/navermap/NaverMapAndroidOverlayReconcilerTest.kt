@@ -272,6 +272,77 @@ class NaverMapAndroidOverlayReconcilerTest {
     }
 
     @Test
+    fun rollbackRefreshesMarkerAndShapeHandlesBeforeRetrying() {
+        val markers = FakeMarkerLayer().apply { failOnDetachedUpdate = true }
+        val shapes = FakeShapeLayer().apply { failOnDetachedUpdate = true }
+        val reconciler = reconciler(markers, shapes)
+        val next = content(
+            markers = listOf(marker("marker")),
+            polylines = listOf(polyline("line")),
+        )
+
+        assertFailsWith<IllegalStateException> {
+            reconciler.renderWithCamera(
+                content = next,
+                applyCamera = { throw IllegalStateException("camera failed") },
+                restoreCamera = {},
+            )
+        }
+
+        reconciler.render(next)
+
+        assertEquals(0, markers.detachedUpdateCalls)
+        assertEquals(0, shapes.detachedUpdateCalls)
+        assertEquals(2, markers.addedModels.count { it.id == "marker" })
+        assertEquals(setOf("weft:marker:marker"), markers.nativeById.keys)
+        assertEquals(setOf("weft:polyline:line"), shapes.nativeById.keys)
+    }
+
+    @Test
+    fun fullRestoreRefreshesMarkerAndShapeHandlesAfterRollbackFailure() {
+        val markers = FakeMarkerLayer().apply { failOnDetachedUpdate = true }
+        val shapes = FakeShapeLayer().apply {
+            failOnUpdateId = "line"
+            failOnRestoreCall = 1
+            failOnDetachedUpdate = true
+        }
+        val reconciler = reconciler(markers, shapes)
+        val committed = content(
+            markers = listOf(marker("marker", title = "before")),
+            polylines = listOf(polyline("line", visible = true)),
+        )
+        reconciler.render(committed)
+
+        assertFailsWith<IllegalStateException> {
+            reconciler.render(
+                content(
+                    markers = listOf(marker("marker", title = "after")),
+                    polylines = listOf(polyline("line", visible = false)),
+                ),
+            )
+        }
+
+        shapes.failOnUpdateId = null
+        reconciler.render(
+            content(
+                markers = listOf(marker("marker", title = "after")),
+                polylines = listOf(polyline("line", visible = false)),
+            ),
+        )
+        reconciler.render(
+            content(
+                markers = listOf(marker("marker", title = "final")),
+                polylines = listOf(polyline("line", visible = true)),
+            ),
+        )
+
+        assertEquals(0, markers.detachedUpdateCalls)
+        assertEquals(0, shapes.detachedUpdateCalls)
+        assertEquals("final", markers.nativeById.getValue("weft:marker:marker").model?.title)
+        assertTrue(shapes.nativeById.getValue("weft:polyline:line").visible)
+    }
+
+    @Test
     fun removesStaleDetachedHandlesFromNativeLayerRegistry() {
         val detached = mutableListOf<String>()
         val registry = NaverMapAndroidNativeHandleRegistry<String> { detached += it }
@@ -333,6 +404,49 @@ class NaverMapAndroidOverlayReconcilerTest {
         lifecycleBridge(restoredView, restoredState, FakeComponentCallbacksBridge()).create()
         assertSame(restored, restoredView.createdWith)
         assertEquals(1, restoredState.consumeCalls)
+    }
+
+    @Test
+    fun createUnwindsWhenMapViewOnCreateFails() {
+        val view = FakeViewLifecycle().apply { failOnCreate = IllegalStateException("create failed") }
+        val savedState = FakeSavedStateBridge()
+        val callbacks = FakeComponentCallbacksBridge()
+        val bridge = lifecycleBridge(view, savedState, callbacks)
+
+        assertFailsWith<IllegalStateException> { bridge.create() }
+
+        assertEquals(listOf("create", "destroy"), view.calls)
+        assertEquals(0, callbacks.registerCalls)
+    }
+
+    @Test
+    fun createUnwindsWhenComponentRegistrationFails() {
+        val view = FakeViewLifecycle()
+        val savedState = FakeSavedStateBridge()
+        val callbacks = FakeComponentCallbacksBridge().apply {
+            registerFailure = IllegalStateException("component registration failed")
+        }
+        val bridge = lifecycleBridge(view, savedState, callbacks)
+
+        assertFailsWith<IllegalStateException> { bridge.create() }
+
+        assertEquals(listOf("create", "destroy"), view.calls)
+        assertEquals(0, savedState.registerCalls)
+    }
+
+    @Test
+    fun deferredSavedStateRegistrationFailureUnwindsLifecycle() {
+        val view = FakeViewLifecycle()
+        val savedState = FakeSavedStateBridge().apply { registerResult = false }
+        val callbacks = FakeComponentCallbacksBridge()
+        val bridge = lifecycleBridge(view, savedState, callbacks)
+        bridge.create()
+        savedState.registerFailure = IllegalStateException("deferred registration failed")
+
+        assertFailsWith<IllegalStateException> { bridge.onAttach() }
+
+        assertEquals(listOf("create", "destroy"), view.calls)
+        assertEquals(1, callbacks.unregisterCalls)
     }
 
     @Test
@@ -403,6 +517,44 @@ class NaverMapAndroidOverlayReconcilerTest {
     }
 
     @Test
+    fun configuresPolygonGeometryBeforeNativeMapAttachment() {
+        var configuredPointCount = 0
+        val events = mutableListOf<String>()
+
+        attachNaverMapOverlayAfterConfiguration(
+            configure = {
+                configuredPointCount = 3
+                events += "coords"
+            },
+            attach = {
+                assertTrue(configuredPointCount >= 3)
+                events += "map"
+            },
+        )
+
+        assertEquals(listOf("coords", "map"), events)
+    }
+
+    @Test
+    fun disposeRunsPauseCallbackWhenMapViewPauseFails() {
+        var pauseCallbackCalls = 0
+        val view = FakeViewLifecycle().apply { failOnPause = IllegalStateException("pause failed") }
+        val bridge = NaverMapAndroidLifecycleBridge(
+            view = view,
+            savedState = FakeSavedStateBridge(),
+            componentCallbacks = FakeComponentCallbacksBridge(),
+            savedStateKey = "test-key",
+            onPauseCallback = { pauseCallbackCalls++ },
+        )
+        bridge.create()
+        bridge.onStart()
+        bridge.onResume()
+
+        assertFailsWith<IllegalStateException> { bridge.dispose() }
+        assertEquals(1, pauseCallbackCalls)
+    }
+
+    @Test
     fun teardownRunsAllCleanupStepsAfterFailure() {
         val calls = mutableListOf<String>()
         val failure = assertFailsWith<IllegalStateException> {
@@ -429,11 +581,13 @@ class NaverMapAndroidOverlayReconcilerTest {
         view: FakeViewLifecycle,
         state: FakeSavedStateBridge,
         callbacks: FakeComponentCallbacksBridge,
+        onPauseCallback: () -> Unit = {},
     ) = NaverMapAndroidLifecycleBridge(
         view = view,
         savedState = state,
         componentCallbacks = callbacks,
         savedStateKey = "test-key",
+        onPauseCallback = onPauseCallback,
     )
 
     private fun marker(id: String, title: String? = null, snippet: String? = null) =
@@ -528,6 +682,8 @@ private class FakeMarkerLayer : NaverMapAndroidMarkerLayer {
     val nativeById = linkedMapOf<String, FakeNativeMarker>()
     val addedModels = mutableListOf<MapMarker>()
     val removedIds = mutableListOf<String>()
+    var failOnDetachedUpdate = false
+    var detachedUpdateCalls = 0
     var restoreCalls = 0
     var restoreFailure: Throwable? = null
 
@@ -540,6 +696,10 @@ private class FakeMarkerLayer : NaverMapAndroidMarkerLayer {
     }
 
     override fun update(native: NaverMapAndroidNativeMarker, marker: MapMarker) {
+        if (native !in nativeById.values) {
+            detachedUpdateCalls++
+            if (failOnDetachedUpdate) throw IllegalStateException("marker update used detached handle")
+        }
         (native as FakeNativeMarker).model = marker
     }
 
@@ -548,7 +708,7 @@ private class FakeMarkerLayer : NaverMapAndroidMarkerLayer {
         removedIds += nativeId
     }
 
-    override fun restore(markers: List<MapMarker>) {
+    override fun restore(markers: List<MapMarker>): Map<String, NaverMapAndroidNativeMarker> {
         restoreCalls++
         restoreFailure?.let { failure -> restoreFailure = null; throw failure }
         nativeById.clear()
@@ -556,12 +716,15 @@ private class FakeMarkerLayer : NaverMapAndroidMarkerLayer {
             val nativeId = NaverMapAndroidNativeIds.marker(it.id)
             nativeById[nativeId] = FakeNativeMarker(nativeId, it)
         }
+        return nativeById.toMap()
     }
 }
 
 private class FakeShapeLayer : NaverMapAndroidShapeLayer {
     val nativeById = linkedMapOf<String, FakeNativeShape>()
     val removedIds = mutableListOf<String>()
+    var failOnDetachedUpdate = false
+    var detachedUpdateCalls = 0
     var restoreCalls = 0
     var failOnUpdateId: String? = null
     var failOnRestoreCall: Int? = null
@@ -576,6 +739,10 @@ private class FakeShapeLayer : NaverMapAndroidShapeLayer {
     }
 
     override fun update(native: NaverMapAndroidNativeShape, shape: NaverMapAndroidShape) {
+        if (native !in nativeById.values) {
+            detachedUpdateCalls++
+            if (failOnDetachedUpdate) throw IllegalStateException("shape update used detached handle")
+        }
         if (shape.id == failOnUpdateId) throw IllegalStateException("shape update failed")
         (native as FakeNativeShape).apply(shape)
     }
@@ -585,7 +752,7 @@ private class FakeShapeLayer : NaverMapAndroidShapeLayer {
         removedIds += nativeId
     }
 
-    override fun restore(shapes: List<NaverMapAndroidShape>) {
+    override fun restore(shapes: List<NaverMapAndroidShape>): Map<String, NaverMapAndroidNativeShape> {
         restoreCalls++
         if (restoreCalls == failOnRestoreCall) throw IllegalStateException("shape restore failed")
         restoreFailure?.let { failure -> restoreFailure = null; throw failure }
@@ -593,6 +760,7 @@ private class FakeShapeLayer : NaverMapAndroidShapeLayer {
         shapes.forEach {
             nativeById[it.nativeId] = FakeNativeShape(it.nativeId).also { native -> native.apply(it) }
         }
+        return nativeById.toMap()
     }
 }
 
@@ -620,11 +788,16 @@ private class FakeViewLifecycle(
     override val view: View = View(Application())
     val calls = mutableListOf<String>()
     var createdWith: Bundle? = null
+    var failOnCreate: Throwable? = null
     var failOnPause: Throwable? = null
     var failOnStop: Throwable? = null
     var failOnDestroy: Throwable? = null
 
-    override fun onCreate(bundle: Bundle) { calls += "create"; createdWith = bundle }
+    override fun onCreate(bundle: Bundle) {
+        calls += "create"
+        createdWith = bundle
+        failOnCreate?.let { throw it }
+    }
     override fun onStart() { calls += "start" }
     override fun onResume() { calls += "resume" }
     override fun onPause() { calls += "pause"; eventLog += "pause"; failOnPause?.let { throw it } }
@@ -643,15 +816,18 @@ private class FakeSavedStateBridge(
     var registerCalls = 0
     var unregisterCalls = 0
     var unregisterFailure: Throwable? = null
+    var registerResult = true
+    var registerFailure: Throwable? = null
     override fun consumeRestoredStateForKey(key: String): Bundle? { consumeCalls++; return restored }
-    override fun registerSavedStateProvider(key: String, provider: () -> Bundle): Boolean {
+    override fun registerSavedStateProvider(key: String, provider: () -> Bundle): NaverMapAndroidSavedStateRegistration? {
         registerCalls++
-        return true
-    }
-    override fun unregisterSavedStateProvider(key: String) {
-        unregisterCalls++
-        eventLog += "saved-state-unregister"
-        unregisterFailure?.let { throw it }
+        registerFailure?.let { throw it }
+        if (!registerResult) return null
+        return NaverMapAndroidSavedStateRegistration {
+            unregisterCalls++
+            eventLog += "saved-state-unregister"
+            unregisterFailure?.let { throw it }
+        }
     }
 }
 
@@ -661,9 +837,14 @@ private class FakeComponentCallbacksBridge(
     var registerCalls = 0
     var unregisterCalls = 0
     var lowMemoryCalls = 0
+    var registerFailure: Throwable? = null
     var unregisterFailure: Throwable? = null
     private var callback: (() -> Unit)? = null
-    override fun register(callback: () -> Unit) { registerCalls++; this.callback = callback }
+    override fun register(callback: () -> Unit) {
+        registerCalls++
+        registerFailure?.let { throw it }
+        this.callback = callback
+    }
     override fun unregister(callback: () -> Unit) {
         unregisterCalls++
         eventLog += "component-unregister"

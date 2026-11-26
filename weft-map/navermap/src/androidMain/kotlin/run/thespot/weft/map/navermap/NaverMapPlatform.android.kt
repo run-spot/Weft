@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -21,8 +22,12 @@ import com.naver.maps.map.NaverMapSdk
 import com.naver.maps.map.OnMapReadyCallback
 import run.thespot.weft.core.map.MapContent
 import run.thespot.weft.core.map.WeftMapState
+import java.util.UUID
 
 internal const val NAVER_MAP_SAVED_STATE_KEY = "run.thespot.weft.map.navermap.MapView"
+
+internal fun naverMapSavedStateKey(surfaceId: String): String =
+    "$NAVER_MAP_SAVED_STATE_KEY.$surfaceId"
 
 internal fun interface NaverMapAndroidMapViewFactory {
     fun create(context: Context): NaverMapAndroidViewLifecycle
@@ -43,8 +48,14 @@ internal interface NaverMapAndroidViewLifecycle {
 
 internal interface NaverMapAndroidSavedStateBridge {
     fun consumeRestoredStateForKey(key: String): Bundle?
-    fun registerSavedStateProvider(key: String, provider: () -> Bundle): Boolean
-    fun unregisterSavedStateProvider(key: String)
+    fun registerSavedStateProvider(
+        key: String,
+        provider: () -> Bundle,
+    ): NaverMapAndroidSavedStateRegistration?
+}
+
+internal fun interface NaverMapAndroidSavedStateRegistration {
+    fun unregister()
 }
 
 internal interface NaverMapAndroidComponentCallbacksBridge {
@@ -65,25 +76,45 @@ internal class NaverMapAndroidLifecycleBridge(
 ) {
     private var created = false
     private var disposed = false
-    private var providerRegistered = false
+    private var savedStateRegistration: NaverMapAndroidSavedStateRegistration? = null
+    private var componentRegistered = false
+    private var viewCreateStarted = false
+    private var viewDestroyed = false
     private var started = false
     private var resumed = false
-    private var stopped = false
     private val lowMemoryCallback = { view.onLowMemory() }
     private val savedStateProvider = { Bundle().also(view::onSaveInstanceState) }
 
     fun create() {
         if (created || disposed) return
-        created = true
-        view.onCreate(savedState.consumeRestoredStateForKey(savedStateKey) ?: Bundle())
-        componentCallbacks.register(lowMemoryCallback)
-        providerRegistered = savedState.registerSavedStateProvider(savedStateKey, savedStateProvider)
+        viewCreateStarted = true
+        try {
+            view.onCreate(savedState.consumeRestoredStateForKey(savedStateKey) ?: Bundle())
+            componentRegistered = true
+            componentCallbacks.register(lowMemoryCallback)
+            savedStateRegistration = savedState.registerSavedStateProvider(savedStateKey, savedStateProvider)
+            created = true
+        } catch (failure: Throwable) {
+            runCatching { dispose() }
+                .exceptionOrNull()
+                ?.let(failure::addSuppressedSafely)
+            throw failure
+        }
     }
 
     fun onAttach() {
         if (disposed) return
-        if (!providerRegistered) providerRegistered = savedState.registerSavedStateProvider(savedStateKey, savedStateProvider)
-        onAttachCallback()
+        try {
+            if (savedStateRegistration == null) {
+                savedStateRegistration = savedState.registerSavedStateProvider(savedStateKey, savedStateProvider)
+            }
+            onAttachCallback()
+        } catch (failure: Throwable) {
+            runCatching { dispose() }
+                .exceptionOrNull()
+                ?.let(failure::addSuppressedSafely)
+            throw failure
+        }
     }
 
     fun onDetach() { if (!disposed) onDetachCallback() }
@@ -105,15 +136,24 @@ internal class NaverMapAndroidLifecycleBridge(
     fun onPause() {
         if (!disposed && resumed) {
             resumed = false
-            view.onPause()
-            onPauseCallback()
+            var firstFailure: Throwable? = null
+            try {
+                view.onPause()
+            } catch (failure: Throwable) {
+                firstFailure = failure
+            }
+            try {
+                onPauseCallback()
+            } catch (failure: Throwable) {
+                if (firstFailure == null) firstFailure = failure else firstFailure?.addSuppressedSafely(failure)
+            }
+            firstFailure?.let { throw it }
         }
     }
 
     fun onStop() {
         if (!disposed && started) {
             started = false
-            stopped = true
             view.onStop()
         }
     }
@@ -132,23 +172,30 @@ internal class NaverMapAndroidLifecycleBridge(
             }
         }
 
-        if (providerRegistered) attempt { savedState.unregisterSavedStateProvider(savedStateKey) }
-        providerRegistered = false
-        attempt { componentCallbacks.unregister(lowMemoryCallback) }
+        savedStateRegistration?.let { registration ->
+            attempt { registration.unregister() }
+        }
+        savedStateRegistration = null
+        if (componentRegistered) attempt { componentCallbacks.unregister(lowMemoryCallback) }
+        componentRegistered = false
         if (resumed) {
             resumed = false
-            attempt {
-                view.onPause()
-                onPauseCallback()
-            }
+            attempt { view.onPause() }
+            attempt { onPauseCallback() }
         }
         if (started) {
             started = false
-            stopped = true
             attempt { view.onStop() }
         }
         attempt {
-            if (onFinishCallback == null) view.onDestroy() else onFinishCallback.invoke()
+            if (onFinishCallback == null) {
+                if (!viewDestroyed) {
+                    viewDestroyed = true
+                    view.onDestroy()
+                }
+            } else {
+                onFinishCallback.invoke()
+            }
         }
         firstFailure?.let { throw it }
     }
@@ -183,12 +230,16 @@ private class ProductionSavedStateBridge(private val view: View) : NaverMapAndro
             .invoke(null, view) as? SavedStateRegistryOwner
     }.getOrNull()
     override fun consumeRestoredStateForKey(key: String): Bundle? = registry()?.consumeRestoredStateForKey(key)
-    override fun registerSavedStateProvider(key: String, provider: () -> Bundle): Boolean {
-        val registry = registry() ?: return false
+    override fun registerSavedStateProvider(
+        key: String,
+        provider: () -> Bundle,
+    ): NaverMapAndroidSavedStateRegistration? {
+        val registry = registry() ?: return null
         registry.registerSavedStateProvider(key, SavedStateRegistry.SavedStateProvider { provider() })
-        return true
+        return NaverMapAndroidSavedStateRegistration {
+            registry.unregisterSavedStateProvider(key)
+        }
     }
-    override fun unregisterSavedStateProvider(key: String) { registry()?.unregisterSavedStateProvider(key) }
 }
 
 @Suppress("DEPRECATION")
@@ -215,8 +266,17 @@ internal actual fun NaverMapPlatformSurface(
     onError: ((Throwable) -> Unit)?,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
+    val surfaceId = rememberSaveable { UUID.randomUUID().toString() }
     key(ncpKeyId, lifecycleOwner) {
-        val surface = remember { NaverMapAndroidSurface(ncpKeyId, state, content, onError) }
+        val surface = remember {
+            NaverMapAndroidSurface(
+                ncpKeyId,
+                state,
+                content,
+                onError,
+                savedStateKey = naverMapSavedStateKey(surfaceId),
+            )
+        }
         DisposableEffect(lifecycleOwner, surface) {
             val observer = LifecycleEventObserver { _, event -> surface.onLifecycleEvent(event) }
             lifecycleOwner.lifecycle.addObserver(observer)
@@ -242,12 +302,21 @@ internal class NaverMapAndroidSurface(
     private val initialOnError: ((Throwable) -> Unit)?,
     private val mapViewFactory: NaverMapAndroidMapViewFactory = ProductionNaverMapViewFactory(),
     private val initializeSdk: ((Context, String) -> Unit)? = null,
+    private val savedStateBridgeFactory: (View) -> NaverMapAndroidSavedStateBridge = { view ->
+        ProductionSavedStateBridge(view)
+    },
+    private val componentCallbacksBridgeFactory: (Context) -> NaverMapAndroidComponentCallbacksBridge = { context ->
+        ProductionComponentCallbacksBridge(context)
+    },
+    private val savedStateKey: String = naverMapSavedStateKey(UUID.randomUUID().toString()),
 ) {
     private var state = initialState
     private var content = initialContent
     private var finished = false
     private var bridge: NaverMapAndroidLifecycleBridge? = null
     private var coordinator: NaverMapAndroidCoordinator? = null
+    private var currentOnError: ((Throwable) -> Unit)? = initialOnError
+    private var lifecycleState: Lifecycle.State = Lifecycle.State.INITIALIZED
 
     fun createView(context: Context): View {
         check(!finished) { "Naver Maps Android surface is finished." }
@@ -268,60 +337,115 @@ internal class NaverMapAndroidSurface(
                 initializeSdk?.invoke(context, key)
                     ?: NaverMapSdk.getInstance(context).setClient(NaverMapSdk.NcpKeyClient(key))
             },
-            density = context.resources.displayMetrics.density,
+            density = { context.resources.displayMetrics.density },
         )
         val lifecycle = host.createLifecycle(ncpKeyId)
         val coordinator = NaverMapAndroidCoordinator(host, ncpKeyId, state, content, initialOnError)
         val lifecycleBridge = NaverMapAndroidLifecycleBridge(
             lifecycle,
-            ProductionSavedStateBridge(lifecycle.view),
-            ProductionComponentCallbacksBridge(context),
-            NAVER_MAP_SAVED_STATE_KEY,
+            savedStateBridgeFactory(lifecycle.view),
+            componentCallbacksBridgeFactory(context),
+            savedStateKey,
             onAttachCallback = coordinator::onAttach,
             onDetachCallback = coordinator::onDetach,
             onResumeCallback = coordinator::onResume,
             onPauseCallback = coordinator::onPause,
             onFinishCallback = coordinator::onFinish,
         )
-        lifecycleBridge.create()
-        host.bindLifecycle(lifecycle)
-        lifecycle.view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(view: View) = lifecycleBridge.onAttach()
-            override fun onViewDetachedFromWindow(view: View) = lifecycleBridge.onDetach()
-        })
-        this.bridge = lifecycleBridge
-        this.coordinator = coordinator
-        return lifecycle.view
+        return try {
+            lifecycleBridge.create()
+            host.bindLifecycle(lifecycle)
+            lifecycle.view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(view: View) {
+                    runCatching {
+                        lifecycleBridge.onAttach()
+                        replayLifecycle(lifecycleBridge)
+                    }.onFailure(::handleLifecycleFailure)
+                }
+
+                override fun onViewDetachedFromWindow(view: View) {
+                    runCatching { lifecycleBridge.onDetach() }
+                        .onFailure(::handleLifecycleFailure)
+                }
+            })
+            this.bridge = lifecycleBridge
+            this.coordinator = coordinator
+            replayLifecycle(lifecycleBridge)
+            lifecycle.view
+        } catch (failure: Throwable) {
+            runCatching { lifecycleBridge.dispose() }
+                .exceptionOrNull()
+                ?.let(failure::addSuppressedSafely)
+            throw failure
+        }
     }
 
     fun update(state: WeftMapState, content: MapContent, onError: ((Throwable) -> Unit)?) {
         this.state = state
         this.content = content
+        currentOnError = onError
         coordinator?.update(state, content, onError)
     }
 
     fun syncLifecycle(state: Lifecycle.State) {
-        if (state.isAtLeast(Lifecycle.State.STARTED)) bridge?.onStart()
-        if (state.isAtLeast(Lifecycle.State.RESUMED)) bridge?.onResume() else bridge?.onPause()
+        lifecycleState = state
+        bridge?.let(::replayLifecycle)
     }
 
     fun onLifecycleEvent(event: Lifecycle.Event) {
-        when (event) {
-            Lifecycle.Event.ON_START -> bridge?.onStart()
-            Lifecycle.Event.ON_RESUME -> bridge?.onResume()
-            Lifecycle.Event.ON_PAUSE -> bridge?.onPause()
-            Lifecycle.Event.ON_STOP -> bridge?.onStop()
-            Lifecycle.Event.ON_DESTROY -> finish()
-            else -> Unit
+        lifecycleState = when (event) {
+            Lifecycle.Event.ON_START -> Lifecycle.State.STARTED
+            Lifecycle.Event.ON_RESUME -> Lifecycle.State.RESUMED
+            Lifecycle.Event.ON_PAUSE -> Lifecycle.State.STARTED
+            Lifecycle.Event.ON_STOP -> Lifecycle.State.CREATED
+            Lifecycle.Event.ON_DESTROY -> Lifecycle.State.DESTROYED
+            else -> lifecycleState
         }
+        runCatching {
+            when (event) {
+                Lifecycle.Event.ON_START -> bridge?.onStart()
+                Lifecycle.Event.ON_RESUME -> bridge?.onResume()
+                Lifecycle.Event.ON_PAUSE -> bridge?.onPause()
+                Lifecycle.Event.ON_STOP -> bridge?.onStop()
+                Lifecycle.Event.ON_DESTROY -> finish()
+                else -> Unit
+            }
+        }.onFailure(::handleLifecycleFailure)
     }
 
     fun finish() {
         if (finished) return
         finished = true
-        bridge?.dispose()
-        if (bridge == null) coordinator?.onFinish()
+        val bridgeToDispose = bridge
+        val coordinatorToFinish = coordinator
         bridge = null
         coordinator = null
+        var firstFailure: Throwable? = null
+
+        fun attempt(action: () -> Unit) {
+            try {
+                action()
+            } catch (failure: Throwable) {
+                val primary = firstFailure
+                if (primary == null) firstFailure = failure else primary.addSuppressedSafely(failure)
+            }
+        }
+
+        attempt { bridgeToDispose?.dispose() }
+        attempt { coordinatorToFinish?.onFinish() }
+        firstFailure?.let { throw it }
+    }
+
+    private fun replayLifecycle(bridge: NaverMapAndroidLifecycleBridge) {
+        if (lifecycleState.isAtLeast(Lifecycle.State.STARTED)) bridge.onStart()
+        if (lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) bridge.onResume() else bridge.onPause()
+    }
+
+    private fun handleLifecycleFailure(failure: Throwable) {
+        val sanitized = NaverMapException("Naver Maps Android surface lifecycle operation failed.")
+        runCatching { finish() }
+            .exceptionOrNull()
+            ?.let(sanitized::addSuppressedSafely)
+        runCatching { currentOnError?.invoke(sanitized) }
     }
 }

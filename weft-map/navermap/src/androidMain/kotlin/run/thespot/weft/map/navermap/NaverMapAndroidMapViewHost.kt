@@ -10,7 +10,6 @@ import com.naver.maps.map.NaverMap
 import run.thespot.weft.core.map.CameraPosition
 import run.thespot.weft.core.map.MapContent
 import run.thespot.weft.core.map.LatLng
-import kotlin.math.roundToInt
 
 internal data class NaverMapAndroidNativeLatLng(
     val latitude: Double,
@@ -23,6 +22,15 @@ internal data class NaverMapAndroidNativeCameraPosition(
     val tilt: Double,
     val bearing: Double,
 )
+
+/** Naver validates polygon geometry when an overlay is attached to a map. */
+internal inline fun attachNaverMapOverlayAfterConfiguration(
+    configure: () -> Unit,
+    attach: () -> Unit,
+) {
+    configure()
+    attach()
+}
 
 internal interface NaverMapAndroidMapBridge {
     var cameraPosition: NaverMapAndroidNativeCameraPosition
@@ -44,7 +52,7 @@ internal class NaverMapAndroidMapViewHost(
     private val context: Context,
     private val mapViewFactory: NaverMapAndroidMapViewFactory,
     private val initializeSdk: (String) -> Unit,
-    private val density: Float = 1f,
+    private val density: () -> Float = { 1f },
 ) : NaverMapAndroidHost {
     private var viewLifecycle: NaverMapAndroidViewLifecycle? = null
     private var nativeMap: NaverMapAndroidMapBridge? = null
@@ -82,7 +90,7 @@ internal class NaverMapAndroidMapViewHost(
         lifecycle.getMapAsync { map ->
             if (finished) return@getMapAsync
             nativeMap = map
-            val style = NaverMapAndroidOverlayStyle(density)
+            val style = NaverMapAndroidOverlayStyle(density())
             reconciler = NaverMapAndroidOverlayReconciler(
                 markerLayer = map.markerLayer(style),
                 shapeLayer = map.shapeLayer(style),
@@ -90,8 +98,8 @@ internal class NaverMapAndroidMapViewHost(
             )
             onReady(
                 NaverMapCameraBounds(
-                    minZoom = map.minZoom.roundToInt(),
-                    maxZoom = map.maxZoom.roundToInt(),
+                    minZoom = map.minZoom,
+                    maxZoom = map.maxZoom,
                     minTilt = map.minTilt.toFloat(),
                     maxTilt = map.maxTilt.toFloat(),
                 ),
@@ -145,13 +153,13 @@ internal class NaverMapAndroidMapViewHost(
 }
 
 private fun CameraPosition.toNativeCamera(map: NaverMapAndroidMapBridge): NaverMapAndroidNativeCameraPosition {
-    val minZoom = map.minZoom.roundToInt()
-    val maxZoom = map.maxZoom.roundToInt()
+    val minZoom = map.minZoom
+    val maxZoom = map.maxZoom
     val minTilt = map.minTilt.toFloat()
     val maxTilt = map.maxTilt.toFloat()
     return NaverMapAndroidNativeCameraPosition(
         target = NaverMapAndroidNativeLatLng(target.latitude, target.longitude),
-        zoom = zoom.roundToInt().coerceIn(minZoom, maxZoom).toDouble(),
+        zoom = zoom.toDouble().coerceIn(minZoom, maxZoom),
         tilt = tilt.coerceIn(minTilt, maxTilt).toDouble(),
         bearing = ((bearing % 360f) + 360f) % 360f.toDouble(),
     )
@@ -216,7 +224,7 @@ private class NaverMapAndroidNaverMarkerLayer(
         handles.remove(nativeId)?.detach()
     }
 
-    override fun restore(markers: List<run.thespot.weft.core.map.MapMarker>) {
+    override fun restore(markers: List<run.thespot.weft.core.map.MapMarker>): Map<String, NaverMapAndroidNativeMarker> {
         val ids = markers.map { NaverMapAndroidNativeIds.marker(it.id) }.toSet()
         handles.retain(ids)
         markers.forEach { marker ->
@@ -224,6 +232,7 @@ private class NaverMapAndroidNaverMarkerLayer(
             val handle = handles.get(nativeId) ?: NaverMarkerHandle(nativeId).also { handles.put(nativeId, it) }
             handle.apply(marker)
         }
+        return handles.snapshot()
     }
 
     private inner class NaverMarkerHandle(
@@ -263,13 +272,14 @@ private class NaverMapAndroidNaverShapeLayer(
         handles.remove(nativeId)?.detach()
     }
 
-    override fun restore(shapes: List<NaverMapAndroidShape>) {
+    override fun restore(shapes: List<NaverMapAndroidShape>): Map<String, NaverMapAndroidNativeShape> {
         val ids = shapes.map(NaverMapAndroidShape::nativeId).toSet()
         handles.retain(ids)
         shapes.forEach { shape ->
             val handle = handles.get(shape.nativeId) ?: NaverShapeHandle(shape).also { handles.put(shape.nativeId, it) }
             handle.apply(shape)
         }
+        return handles.snapshot()
     }
 
     private inner class NaverShapeHandle(
@@ -281,36 +291,40 @@ private class NaverMapAndroidNaverShapeLayer(
         init { apply(shape) }
 
         fun apply(shape: NaverMapAndroidShape) {
-            overlay.map = map
-            when (shape) {
-                is NaverMapAndroidShape.Polyline -> {
-                    val native = overlay as com.naver.maps.map.overlay.PolylineOverlay
-                    native.coords = shape.value.points.map { NaverLatLng(it.latitude, it.longitude) }
-                    native.color = style.color(shape.value.color)
-                    native.width = style.strokeWidth(shape.value.widthDp)
-                    native.isVisible = shape.value.visible
-                    native.globalZIndex = style.zIndex(shape.value.zIndex)
-                }
-                is NaverMapAndroidShape.Polygon -> {
-                    val native = overlay as com.naver.maps.map.overlay.PolygonOverlay
-                    native.coords = shape.value.points.map { NaverLatLng(it.latitude, it.longitude) }
-                    native.color = style.color(shape.value.fillColor)
-                    native.outlineColor = style.color(shape.value.strokeColor)
-                    native.outlineWidth = style.strokeWidth(shape.value.strokeWidthDp)
-                    native.isVisible = shape.value.visible
-                    native.globalZIndex = style.zIndex(shape.value.zIndex)
-                }
-                is NaverMapAndroidShape.Circle -> {
-                    val native = overlay as com.naver.maps.map.overlay.CircleOverlay
-                    native.center = NaverLatLng(shape.value.center.latitude, shape.value.center.longitude)
-                    native.radius = shape.value.radiusMeters
-                    native.color = style.color(shape.value.fillColor)
-                    native.outlineColor = style.color(shape.value.strokeColor)
-                    native.outlineWidth = style.strokeWidth(shape.value.strokeWidthDp)
-                    native.isVisible = shape.value.visible
-                    native.globalZIndex = style.zIndex(shape.value.zIndex)
-                }
-            }
+            attachNaverMapOverlayAfterConfiguration(
+                configure = {
+                    when (shape) {
+                        is NaverMapAndroidShape.Polyline -> {
+                            val native = overlay as com.naver.maps.map.overlay.PolylineOverlay
+                            native.coords = shape.value.points.map { NaverLatLng(it.latitude, it.longitude) }
+                            native.color = style.color(shape.value.color)
+                            native.width = style.strokeWidth(shape.value.widthDp)
+                            native.isVisible = shape.value.visible
+                            native.globalZIndex = style.zIndex(shape.value.zIndex)
+                        }
+                        is NaverMapAndroidShape.Polygon -> {
+                            val native = overlay as com.naver.maps.map.overlay.PolygonOverlay
+                            native.coords = shape.value.points.map { NaverLatLng(it.latitude, it.longitude) }
+                            native.color = style.color(shape.value.fillColor)
+                            native.outlineColor = style.color(shape.value.strokeColor)
+                            native.outlineWidth = style.strokeWidth(shape.value.strokeWidthDp)
+                            native.isVisible = shape.value.visible
+                            native.globalZIndex = style.zIndex(shape.value.zIndex)
+                        }
+                        is NaverMapAndroidShape.Circle -> {
+                            val native = overlay as com.naver.maps.map.overlay.CircleOverlay
+                            native.center = NaverLatLng(shape.value.center.latitude, shape.value.center.longitude)
+                            native.radius = shape.value.radiusMeters
+                            native.color = style.color(shape.value.fillColor)
+                            native.outlineColor = style.color(shape.value.strokeColor)
+                            native.outlineWidth = style.strokeWidth(shape.value.strokeWidthDp)
+                            native.isVisible = shape.value.visible
+                            native.globalZIndex = style.zIndex(shape.value.zIndex)
+                        }
+                    }
+                },
+                attach = { overlay.map = map },
+            )
         }
 
         fun detach() { overlay.map = null }

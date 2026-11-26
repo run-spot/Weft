@@ -3,6 +3,7 @@ package run.thespot.weft.map.navermap
 import android.os.Bundle
 import android.app.Application
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import androidx.compose.runtime.AbstractApplier
 import androidx.compose.runtime.BroadcastFrameClock
 import androidx.compose.runtime.Composable
@@ -29,6 +30,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
@@ -66,6 +68,19 @@ class NaverMapAndroidCoordinatorTest {
         host.ready()
         coordinator.onPause()
         coordinator.onResume()
+
+        assertEquals(listOf("start", "pause", "resume"), host.lifecycleCalls)
+    }
+
+    @Test
+    fun reattachesWhileOwnerRemainsResumedAndResumesHost() {
+        val host = FakeNaverMapAndroidHost()
+        val coordinator = coordinator(host)
+
+        coordinator.onAttach()
+        coordinator.onResume()
+        coordinator.onDetach()
+        coordinator.onAttach()
 
         assertEquals(listOf("start", "pause", "resume"), host.lifecycleCalls)
     }
@@ -111,8 +126,8 @@ class NaverMapAndroidCoordinatorTest {
     fun normalizesCameraToNativeBounds() {
         val host = FakeNaverMapAndroidHost(
             bounds = NaverMapCameraBounds(
-                minZoom = 4,
-                maxZoom = 18,
+                minZoom = 4.0,
+                maxZoom = 18.0,
                 minTilt = 10f,
                 maxTilt = 45f,
             ),
@@ -139,6 +154,28 @@ class NaverMapAndroidCoordinatorTest {
         assertEquals(18f, camera?.zoom)
         assertEquals(270f, camera?.bearing)
         assertEquals(45f, camera?.tilt)
+    }
+
+    @Test
+    fun clampsCameraZoomAgainstPreciseNativeBounds() {
+        val host = FakeNaverMapAndroidHost(
+            bounds = NaverMapCameraBounds(
+                minZoom = 2.25,
+                maxZoom = 19.75,
+                minTilt = 0f,
+                maxTilt = 60f,
+            ),
+        )
+        val coordinator = coordinator(host)
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready()
+
+        coordinator.update(state(zoom = 2f), emptyContent(), null)
+        assertEquals(2.25f, host.renders.last().camera?.zoom)
+
+        coordinator.update(state(zoom = 20f), emptyContent(), null)
+        assertEquals(19.75f, host.renders.last().camera?.zoom)
     }
 
     @Test
@@ -371,6 +408,49 @@ class NaverMapAndroidCoordinatorTest {
     }
 
     @Test
+    fun reportsPreciseNativeZoomBounds() {
+        val events = mutableListOf<String>()
+        val lifecycle = FakeHostViewLifecycle(events)
+        val nativeMap = FakeHostMapBridge(minZoom = 2.25, maxZoom = 19.75)
+        val host = NaverMapAndroidMapViewHost(
+            context = Application(),
+            mapViewFactory = NaverMapAndroidMapViewFactory { lifecycle },
+            initializeSdk = {},
+        )
+        var bounds: NaverMapCameraBounds? = null
+        host.createView("test-key", Bundle())
+        host.start("test-key", state().cameraPosition, { bounds = it }, {})
+        lifecycle.ready(nativeMap)
+
+        assertEquals(2.25, bounds?.minZoom)
+        assertEquals(19.75, bounds?.maxZoom)
+    }
+
+    @Test
+    fun restoresNativeCameraAfterHostCameraMutationFailure() {
+        val lifecycle = FakeHostViewLifecycle(mutableListOf())
+        val nativeMap = FakeHostMapBridge()
+        val host = NaverMapAndroidMapViewHost(
+            context = Application(),
+            mapViewFactory = NaverMapAndroidMapViewFactory { lifecycle },
+            initializeSdk = {},
+        )
+        host.createView("test-key", Bundle())
+        host.start("test-key", state().cameraPosition, {}, {})
+        lifecycle.ready(nativeMap)
+        val previous = nativeMap.cameraPosition
+        nativeMap.failNextMove = true
+
+        assertFailsWith<IllegalStateException> {
+            host.render(state(zoom = 8f).cameraPosition, emptyContent()) {}
+        }
+
+        assertEquals(previous, nativeMap.cameraPosition)
+        assertEquals(2, nativeMap.moveCalls.size)
+        assertEquals(previous, nativeMap.moveCalls.last())
+    }
+
+    @Test
     fun reportsSdkFactoryFailureThroughOnErrorAndReturnsPlaceholderView() {
         val secretKey = "secret-ncp-key"
         val errors = mutableListOf<Throwable>()
@@ -395,6 +475,128 @@ class NaverMapAndroidCoordinatorTest {
         assertFalse(errors.single().toString().contains(secretKey))
     }
 
+    @Test
+    fun reportsConflictingSdkKeyThroughSurfaceFactoryWithoutLeakingEitherKey() {
+        val existingKey = "existing-secret-key"
+        val conflictingKey = "conflicting-secret-key"
+        val initializedKeys = mutableListOf<String>()
+        NaverMapAndroidSdkInitializer.initialize(existingKey, initializedKeys::add)
+        val errors = mutableListOf<Throwable>()
+        var factoryCalled = false
+        val surface = NaverMapAndroidSurface(
+            ncpKeyId = conflictingKey,
+            initialState = state(),
+            initialContent = emptyContent(),
+            initialOnError = { errors += it },
+            mapViewFactory = NaverMapAndroidMapViewFactory {
+                factoryCalled = true
+                FakeHostViewLifecycle(mutableListOf())
+            },
+            initializeSdk = { _, _ -> error("conflict initializer should not run") },
+        )
+
+        val placeholder = surface.createView(Application())
+
+        assertIs<View>(placeholder)
+        assertFalse(factoryCalled)
+        assertEquals(listOf(existingKey), initializedKeys)
+        assertEquals(1, errors.size)
+        assertIs<NaverMapException>(errors.single())
+        assertFalse(errors.single().toString().contains(existingKey))
+        assertFalse(errors.single().toString().contains(conflictingKey))
+    }
+
+    @Test
+    fun givesEachSurfaceUniqueSavedStateKeyAndUnregistersAcceptedRegistration() {
+        NaverMapAndroidSdkInitializer.resetForTest()
+        val savedState = RecordingSavedStateBridge()
+        val callbacks = RecordingComponentCallbacksBridge()
+        val errors = mutableListOf<Throwable>()
+        val events = mutableListOf<String>()
+        val first = surface(savedState, callbacks, errors, events)
+        val second = surface(savedState, callbacks, errors, events)
+
+        first.createView(Application())
+        second.createView(Application())
+
+        assertEquals(2, savedState.registeredKeys.size)
+        assertNotEquals(savedState.registeredKeys[0], savedState.registeredKeys[1])
+
+        first.finish()
+        second.finish()
+
+        assertEquals(savedState.registeredKeys, savedState.unregisteredKeys)
+    }
+
+    @Test
+    fun savedStateKeyIsStableForTheSameRememberedSurfaceId() {
+        val restoredSurfaceId = "restored-surface-id"
+
+        val originalKey = naverMapSavedStateKey(restoredSurfaceId)
+        val recreatedKey = naverMapSavedStateKey(restoredSurfaceId)
+
+        assertEquals("$NAVER_MAP_SAVED_STATE_KEY.$restoredSurfaceId", originalKey)
+        assertEquals(originalKey, recreatedKey)
+        assertNotEquals(originalKey, naverMapSavedStateKey("another-surface-id"))
+    }
+
+    @Test
+    fun unwindsSavedStateRegistrationFailureThroughSurfaceErrorAndCleanup() {
+        NaverMapAndroidSdkInitializer.resetForTest()
+        val savedState = RecordingSavedStateBridge().apply {
+            registerFailure = IllegalStateException("saved registry failed")
+        }
+        val callbacks = RecordingComponentCallbacksBridge()
+        val errors = mutableListOf<Throwable>()
+        val events = mutableListOf<String>()
+        val surface = surface(savedState, callbacks, errors, events)
+
+        val placeholder = surface.createView(Application())
+
+        assertIs<View>(placeholder)
+        assertEquals(1, errors.size)
+        assertIs<NaverMapException>(errors.single())
+        assertEquals(1, callbacks.unregisterCalls)
+        assertEquals(listOf("create", "destroy"), events)
+    }
+
+    @Test
+    fun surfaceFinishAggregatesCleanupFailuresAndClearsReferences() {
+        NaverMapAndroidSdkInitializer.resetForTest()
+        val events = mutableListOf<String>()
+        val savedState = RecordingSavedStateBridge(events).apply {
+            unregisterFailure = IllegalStateException("saved state cleanup failed")
+        }
+        val callbacks = RecordingComponentCallbacksBridge(events).apply {
+            unregisterFailure = IllegalArgumentException("component cleanup failed")
+        }
+        val view = FakeHostViewLifecycle(events).apply {
+            failOnPause = IllegalStateException("pause cleanup failed")
+            failOnStop = IllegalArgumentException("stop cleanup failed")
+            failOnDestroy = IllegalStateException("destroy cleanup failed")
+        }
+        val surface = NaverMapAndroidSurface(
+            ncpKeyId = "surface-key",
+            initialState = state(),
+            initialContent = emptyContent(),
+            initialOnError = null,
+            mapViewFactory = NaverMapAndroidMapViewFactory { view },
+            initializeSdk = { _, _ -> },
+            savedStateBridgeFactory = { savedState },
+            componentCallbacksBridgeFactory = { callbacks },
+        )
+        surface.createView(Application())
+        surface.onLifecycleEvent(Lifecycle.Event.ON_START)
+        surface.onLifecycleEvent(Lifecycle.Event.ON_RESUME)
+
+        val failure = assertFailsWith<IllegalStateException> { surface.finish() }
+
+        assertEquals(listOf("create", "saved", "component", "pause", "stop", "destroy"), events)
+        assertEquals("saved state cleanup failed", failure.message)
+        assertEquals(4, failure.suppressedExceptions.size)
+        surface.finish()
+    }
+
     private fun coordinator(
         host: FakeNaverMapAndroidHost,
         initialState: WeftMapState = state(),
@@ -409,6 +611,22 @@ class NaverMapAndroidCoordinatorTest {
         dispatchToMain = dispatchToMain,
     )
 
+    private fun surface(
+        savedState: RecordingSavedStateBridge,
+        callbacks: RecordingComponentCallbacksBridge,
+        errors: MutableList<Throwable> = mutableListOf(),
+        events: MutableList<String> = mutableListOf(),
+    ) = NaverMapAndroidSurface(
+        ncpKeyId = "surface-key",
+        initialState = state(),
+        initialContent = emptyContent(),
+        initialOnError = { errors += it },
+        mapViewFactory = NaverMapAndroidMapViewFactory { FakeHostViewLifecycle(events) },
+        initializeSdk = { _, _ -> },
+        savedStateBridgeFactory = { savedState },
+        componentCallbacksBridgeFactory = { callbacks },
+    )
+
     private fun content(vararg ids: String): MapContent =
         contentFactory.content(ids.map { id -> MapMarker(id, LatLng(37.5665, 126.9780)) })
 
@@ -416,7 +634,7 @@ class NaverMapAndroidCoordinatorTest {
 }
 
 private class FakeNaverMapAndroidHost(
-    private val bounds: NaverMapCameraBounds = NaverMapCameraBounds(2, 20, 0f, 60f),
+    private val bounds: NaverMapCameraBounds = NaverMapCameraBounds(2.0, 20.0, 0f, 60f),
 ) : NaverMapAndroidHost {
     val lifecycleCalls = mutableListOf<String>()
     val renders = mutableListOf<RenderedNaverMap>()
@@ -560,13 +778,16 @@ private class FakeHostViewLifecycle(
 ) : NaverMapAndroidViewLifecycle {
     override val view: View = View(Application())
     private var callback: ((NaverMapAndroidMapBridge) -> Unit)? = null
+    var failOnPause: Throwable? = null
+    var failOnStop: Throwable? = null
+    var failOnDestroy: Throwable? = null
 
     override fun onCreate(bundle: Bundle) { events += "create" }
     override fun onStart() = Unit
     override fun onResume() = Unit
-    override fun onPause() = Unit
-    override fun onStop() = Unit
-    override fun onDestroy() = Unit
+    override fun onPause() { events += "pause"; failOnPause?.let { throw it } }
+    override fun onStop() { events += "stop"; failOnStop?.let { throw it } }
+    override fun onDestroy() { events += "destroy"; failOnDestroy?.let { throw it } }
     override fun onLowMemory() = Unit
     override fun onSaveInstanceState(bundle: Bundle) = Unit
     override fun getMapAsync(callback: (NaverMapAndroidMapBridge) -> Unit) { this.callback = callback }
@@ -576,21 +797,65 @@ private class FakeHostViewLifecycle(
     }
 }
 
-private class FakeHostMapBridge : NaverMapAndroidMapBridge {
+private class FakeHostMapBridge(
+    override val minZoom: Double = 0.0,
+    override val maxZoom: Double = 20.0,
+) : NaverMapAndroidMapBridge {
     override var cameraPosition = NaverMapAndroidNativeCameraPosition(
         target = NaverMapAndroidNativeLatLng(0.0, 0.0),
         zoom = 10.0,
         tilt = 0.0,
         bearing = 0.0,
     )
-    override val minZoom = 0.0
-    override val maxZoom = 20.0
     override val minTilt = 0.0
     override val maxTilt = 60.0
     var lastCamera: NaverMapAndroidNativeCameraPosition? = null
+    var failNextMove = false
+    val moveCalls = mutableListOf<NaverMapAndroidNativeCameraPosition>()
 
     override fun moveCamera(camera: NaverMapAndroidNativeCameraPosition) {
+        moveCalls += camera
         lastCamera = camera
         cameraPosition = camera
+        if (failNextMove) {
+            failNextMove = false
+            throw IllegalStateException("native camera mutation failed")
+        }
+    }
+}
+
+private class RecordingSavedStateBridge(
+    private val events: MutableList<String>? = null,
+) : NaverMapAndroidSavedStateBridge {
+    val registeredKeys = mutableListOf<String>()
+    val unregisteredKeys = mutableListOf<String>()
+    var registerFailure: Throwable? = null
+    var unregisterFailure: Throwable? = null
+
+    override fun consumeRestoredStateForKey(key: String): Bundle? = null
+
+    override fun registerSavedStateProvider(key: String, provider: () -> Bundle): NaverMapAndroidSavedStateRegistration? {
+        registeredKeys += key
+        registerFailure?.let { throw it }
+        return NaverMapAndroidSavedStateRegistration {
+            unregisteredKeys += key
+            events?.add("saved")
+            unregisterFailure?.let { throw it }
+        }
+    }
+}
+
+private class RecordingComponentCallbacksBridge(
+    private val events: MutableList<String>? = null,
+) : NaverMapAndroidComponentCallbacksBridge {
+    var unregisterCalls = 0
+    var unregisterFailure: Throwable? = null
+
+    override fun register(callback: () -> Unit) = Unit
+
+    override fun unregister(callback: () -> Unit) {
+        unregisterCalls++
+        events?.add("component")
+        unregisterFailure?.let { throw it }
     }
 }

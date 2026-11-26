@@ -6,11 +6,10 @@ import run.thespot.weft.core.map.CameraPosition
 import run.thespot.weft.core.map.MapContent
 import run.thespot.weft.core.map.MapMarker
 import run.thespot.weft.core.map.WeftMapState
-import kotlin.math.roundToInt
 
 internal data class NaverMapCameraBounds(
-    val minZoom: Int,
-    val maxZoom: Int,
+    val minZoom: Double,
+    val maxZoom: Double,
     val minTilt: Float,
     val maxTilt: Float,
 ) {
@@ -100,7 +99,7 @@ internal class NaverMapAndroidCoordinator(
     fun onDetach() {
         if (finished) return
         attached = false
-        onPause()
+        pauseHost()
     }
 
     fun onResume() {
@@ -112,6 +111,10 @@ internal class NaverMapAndroidCoordinator(
     fun onPause() {
         if (finished) return
         lifecycleResumed = false
+        pauseHost()
+    }
+
+    private fun pauseHost() {
         if (!started) {
             state = NaverMapAndroidCoordinatorState.Paused
             return
@@ -144,11 +147,7 @@ internal class NaverMapAndroidCoordinator(
         finished = true
         generation++
         state = NaverMapAndroidCoordinatorState.Finished
-        try {
-            host.finish()
-        } catch (_: Throwable) {
-            // Finishing is best-effort and terminal; no callback from this surface is valid now.
-        }
+        host.finish()
     }
 
     private fun maybeStartOrResume() {
@@ -271,7 +270,7 @@ internal class NaverMapAndroidCoordinator(
 }
 
 private fun CameraPosition.normalizeFor(bounds: NaverMapCameraBounds): CameraPosition = copy(
-    zoom = zoom.roundToInt().coerceIn(bounds.minZoom, bounds.maxZoom).toFloat(),
+    zoom = zoom.toDouble().coerceIn(bounds.minZoom, bounds.maxZoom).toFloat(),
     bearing = ((bearing % 360f) + 360f) % 360f,
     tilt = tilt.coerceIn(bounds.minTilt, bounds.maxTilt),
 )
