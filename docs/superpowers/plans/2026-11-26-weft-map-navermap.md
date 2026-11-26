@@ -310,6 +310,7 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
   `keepsNativeIdentityForStyleAndVisibilityUpdates`, `rollsBackAfterMutationFailure`,
   `marksLayerUnsynchronizedWhenRollbackFails`, `forwardsSavedStateAndLowMemoryCallbacks`,
   `restoresEmptyAndRestoredSavedStateBundles`, `unregistersSavedStateProvider`,
+  `initializesSdkBeforeMapViewCreation`, `mapsLatLngAndCameraToNativeValues`,
   `disposesLifecycleBridgesIdempotently`, and `teardownRunsAllCleanupStepsAfterFailure`. Assert
   the reconciler stores committed snapshots, restores on failure, and makes the next render a
   full restore after rollback failure. Assert the fake lifecycle seam receives
@@ -355,13 +356,16 @@ coordinator tests; the concrete `MapView` implementation is created in Task 4.
 
 - [ ] **Step 4: Implement `MapView` host and Compose surface**
 
-  In `NaverMapAndroidMapViewHost.kt`, create `MapView`, call `onCreate` once with the restored or
-  empty `Bundle`, initialize the SDK, register `getMapAsync`, and implement the host interface.
-  Map `LatLng` to `com.naver.maps.geometry.LatLng`, construct the native `CameraPosition`, and
-  call `moveCamera(CameraUpdate.toCameraPosition(...))`; derive current zoom/tilt bounds from the
-  map and normalize bearing before the move. Keep the `NaverMap` native object only after
-  `onMapReady`. Capture the prior native camera for rollback and use `runNaverMapHostTeardown`
-  during finish.
+  In `NaverMapAndroidMapViewHost.kt`, initialize the SDK through
+  `NaverMapAndroidSdkInitializer` before constructing the first `MapView`; test that ordering
+  through the injectable factory. Then create `MapView`, call `onCreate` once with the restored
+  or empty `Bundle`, register `getMapAsync`, and implement the host interface. Map `LatLng` to
+  `com.naver.maps.geometry.LatLng`, construct the native `CameraPosition`, and call
+  `moveCamera(CameraUpdate.toCameraPosition(...))`; assert the exact native target latitude/
+  longitude, zoom, tilt, and normalized bearing through the fake map-view bridge. Derive current
+  zoom/tilt bounds from the map before normalization. Keep the `NaverMap` native object only after
+  `onMapReady`. Capture the prior native camera for rollback and use
+  `runNaverMapHostTeardown` during finish.
 
   In `NaverMapPlatform.android.kt`, use `LocalLifecycleOwner`, `AndroidView`, and `DisposableEffect`.
   Define injectable `NaverMapAndroidMapViewFactory`, `NaverMapAndroidSavedStateBridge`, and
