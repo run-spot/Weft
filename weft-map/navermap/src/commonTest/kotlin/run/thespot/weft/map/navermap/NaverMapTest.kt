@@ -17,11 +17,16 @@ class NaverMapTest {
 
     @Test
     fun rejectsBlankNcpKeyId() {
-        val error = assertFailsWith<IllegalArgumentException> {
+        val emptyError = assertFailsWith<IllegalArgumentException> {
+            NaverMap.prepare { ncpKeyId = "" }
+        }
+        assertEquals("NAVER Maps NCP key ID must not be blank.", emptyError.message)
+
+        val whitespaceError = assertFailsWith<IllegalArgumentException> {
             NaverMap.prepare { ncpKeyId = " \t\n" }
         }
 
-        assertEquals("NAVER Maps NCP key ID must not be blank.", error.message)
+        assertEquals("NAVER Maps NCP key ID must not be blank.", whitespaceError.message)
     }
 
     @Test
