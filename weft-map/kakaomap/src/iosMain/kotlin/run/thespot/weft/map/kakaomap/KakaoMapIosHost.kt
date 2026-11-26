@@ -6,6 +6,22 @@ import kotlinx.cinterop.cValue
 import kotlinx.cinterop.useContents
 import platform.darwin.NSObject
 import platform.UIKit.UIColor
+import androidx.compose.ui.graphics.Color as ComposeColor
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.MapPolygon
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.MapPolygonShape
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.MapPolygonShapeOptions
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.MapPolyline
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.MapPolylineShape
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.MapPolylineShapeOptions
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.PerLevelPolygonStyle
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.PerLevelPolylineStyle
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.PolygonStyle
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.PolygonStyleSet
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.PolylineStyle
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.PolylineStyleSet
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.ShapeLayer
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.ShapeLayerPassTypeOverlay
+import swiftPMImport.run.thespot.weft.weft.map.kakaomap.ShapeManager
 import run.thespot.weft.core.map.CameraPosition
 import run.thespot.weft.core.map.MapContent
 import run.thespot.weft.core.map.MapMarker
@@ -50,6 +66,8 @@ internal class KakaoMapIosMapViewHost(
     private var initialCamera: CameraPosition? = null
     private var markerLayer: LabelLayer? = null
     private var markerReconciler: KakaoMapIosMarkerReconciler? = null
+    private var shapeLayer: ShapeLayer? = null
+    private var shapeReconciler: KakaoMapIosShapeReconciler? = null
 
     override fun prepare(
         appKey: String,
@@ -85,20 +103,29 @@ internal class KakaoMapIosMapViewHost(
 
     override fun render(camera: CameraPosition?, content: MapContent) {
         val map = checkNotNull(kakaoMap) { "Kakao Maps iOS view is not ready." }
-        val reconciler = markerReconciler ?: createMarkerReconciler(map).also { markerReconciler = it }
-        val previousMarkers = reconciler.snapshot
-        reconciler.render(content)
-        if (camera == null) return
+        val markers = markerReconciler ?: createMarkerReconciler(map).also { markerReconciler = it }
+        val shapes = shapeReconciler ?: createShapeReconciler(map).also { shapeReconciler = it }
+        val previousMarkers = markers.snapshot
+        val previousShapes = shapes.snapshot
         try {
-            map.moveCamera(
-                camera.toKakaoMapIosCameraUpdate(
-                    KakaoMapIosZoomBounds(map.minLevel.toInt(), map.maxLevel.toInt()),
-                ).toNative(map),
-                callback = null,
-            )
+            markers.render(content)
+            shapes.render(content)
+            if (camera != null) {
+                map.moveCamera(
+                    camera.toKakaoMapIosCameraUpdate(
+                        KakaoMapIosZoomBounds(map.minLevel.toInt(), map.maxLevel.toInt()),
+                    ).toNative(map),
+                    callback = null,
+                )
+            }
         } catch (failure: Throwable) {
             try {
-                reconciler.restore(previousMarkers)
+                markers.restore(previousMarkers)
+            } catch (rollbackFailure: Throwable) {
+                if (failure !== rollbackFailure) failure.addSuppressed(rollbackFailure)
+            }
+            try {
+                shapes.restore(previousShapes)
             } catch (rollbackFailure: Throwable) {
                 if (failure !== rollbackFailure) failure.addSuppressed(rollbackFailure)
             }
@@ -112,16 +139,25 @@ internal class KakaoMapIosMapViewHost(
 
     override fun reset() {
         val activeController = controller ?: return
-        controller = null
-        delegate = null
-        kakaoMap = null
-        pendingMapInfo = null
-        readyCallback = null
-        errorCallback = null
-        markerLayer = null
-        markerReconciler = null
-        activeController.delegate = null
-        activeController.resetEngine()
+        runKakaoMapHostTeardown(
+            cleanupShapes = { shapeLayer?.clearAllShapes() },
+            finishEngine = {
+                activeController.delegate = null
+                activeController.resetEngine()
+            },
+            clearReferences = {
+                controller = null
+                delegate = null
+                kakaoMap = null
+                pendingMapInfo = null
+                readyCallback = null
+                errorCallback = null
+                markerLayer = null
+                markerReconciler = null
+                shapeLayer = null
+                shapeReconciler = null
+            },
+        )
     }
 
     fun onLayout() {
@@ -149,6 +185,165 @@ internal class KakaoMapIosMapViewHost(
         val activeController = controller ?: return
         didRequestMapView = true
         activeController.addView(mapInfo)
+    }
+
+    private fun createShapeReconciler(map: KakaoMap): KakaoMapIosShapeReconciler {
+        val manager: ShapeManager = checkNotNull(map.getShapeManager()) {
+            "Kakao Maps iOS did not provide a shape manager."
+        }
+        val layer = checkNotNull(
+            manager.addShapeLayerWithLayerID(
+                layerID = KAKAO_MAP_IOS_SHAPE_LAYER_ID,
+                zOrder = KAKAO_MAP_IOS_SHAPE_LAYER_Z_ORDER,
+                passType = ShapeLayerPassTypeOverlay,
+            ),
+        ) { "Kakao Maps iOS could not create the overlay shape layer." }
+        shapeLayer = layer
+        val nativeShapes = mutableMapOf<String, Any>()
+        val nativeZOrders = mutableMapOf<String, Int>()
+        val polylineStyles = KakaoMapOverlayStyleRegistry("weft:polyline-style") { styleId, style ->
+            val width = style.strokeWidthDp.toKakaoMapIosStrokeWidth()
+            val perLevel = PerLevelPolylineStyle(
+                bodyColor = style.strokeColor.toKakaoUIColor(),
+                bodyWidth = width,
+                strokeColor = UIColor.clearColor,
+                strokeWidth = 0u,
+                level = 0L,
+            )
+            val nativeStyle = PolylineStyle(styles = listOf(perLevel))
+            val set = PolylineStyleSet(styleSetID = styleId).apply { addStyle(nativeStyle) }
+            manager.addPolylineStyleSet(set)
+            styleId to set
+        }
+        val polygonStyles = KakaoMapOverlayStyleRegistry("weft:polygon-style") { styleId, style ->
+            val perLevel = PerLevelPolygonStyle(
+                color = (style.fillColor ?: ComposeColor.Transparent).toKakaoUIColor(),
+                strokeWidth = style.strokeWidthDp.toKakaoMapIosStrokeWidth(),
+                strokeColor = style.strokeColor.toKakaoUIColor(),
+                level = 0L,
+            )
+            val nativeStyle = PolygonStyle(styles = listOf(perLevel))
+            val set = PolygonStyleSet(styleSetID = styleId).apply { addStyle(nativeStyle) }
+            manager.addPolygonStyleSet(set)
+            styleId to set
+        }
+
+        fun nextPolylineStyle(shape: KakaoMapOverlayShape): Pair<String, PolylineStyleSet> =
+            polylineStyles.getOrCreate(shape)
+
+        fun nextPolygonStyle(shape: KakaoMapOverlayShape): Pair<String, PolygonStyleSet> =
+            polygonStyles.getOrCreate(shape)
+
+        fun lines(shape: KakaoMapOverlayShape): List<MapPolyline> = listOf(
+            MapPolyline(
+                line = shape.points.map { MapPoint(longitude = it.longitude, latitude = it.latitude) },
+                styleIndex = 0u,
+            ),
+        )
+
+        fun polygons(shape: KakaoMapOverlayShape): List<MapPolygon> = listOf(
+            MapPolygon(
+                exteriorRing = shape.points.map { MapPoint(longitude = it.longitude, latitude = it.latitude) },
+                holes = null,
+                styleIndex = 0u,
+            ),
+        )
+
+        fun updateVisibility(shape: Any, visible: Boolean) {
+            when (shape) {
+                is MapPolylineShape -> if (visible) shape.show() else shape.hide()
+                is MapPolygonShape -> if (visible) shape.show() else shape.hide()
+            }
+        }
+
+        return KakaoMapIosShapeReconciler(
+            object : KakaoMapIosShapeLayer {
+                override fun add(shape: KakaoMapOverlayShape) {
+                    when (shape.kind) {
+                        KakaoMapOverlayKind.Polyline -> {
+                            val (styleId, _) = nextPolylineStyle(shape)
+                            val options = MapPolylineShapeOptions(
+                                shapeID = shape.nativeId,
+                                styleID = styleId,
+                                zOrder = shape.zIndex.toKakaoMapIosZOrder().toLong(),
+                            ).also { it.polylines = lines(shape) }
+                            val native = checkNotNull(
+                                layer.addMapPolylineShape(shapeOptions = options, callback = null),
+                            ) { "Kakao Maps iOS could not add polyline '${shape.nativeId}'." }
+                            nativeShapes[shape.nativeId] = native
+                            nativeZOrders[shape.nativeId] = shape.zIndex.toKakaoMapIosZOrder()
+                            updateVisibility(native, shape.visible)
+                        }
+                        KakaoMapOverlayKind.Polygon -> {
+                            val (styleId, _) = nextPolygonStyle(shape)
+                            val options = MapPolygonShapeOptions(
+                                shapeID = shape.nativeId,
+                                styleID = styleId,
+                                zOrder = shape.zIndex.toKakaoMapIosZOrder().toLong(),
+                            ).also { it.polygons = polygons(shape) }
+                            val native = checkNotNull(
+                                layer.addMapPolygonShape(shapeOptions = options, callback = null),
+                            ) { "Kakao Maps iOS could not add polygon '${shape.nativeId}'." }
+                            nativeShapes[shape.nativeId] = native
+                            nativeZOrders[shape.nativeId] = shape.zIndex.toKakaoMapIosZOrder()
+                            updateVisibility(native, shape.visible)
+                        }
+                    }
+                }
+
+                override fun update(shape: KakaoMapOverlayShape) {
+                    val nextZOrder = shape.zIndex.toKakaoMapIosZOrder()
+                    if (nativeZOrders[shape.nativeId] != nextZOrder) {
+                        remove(shape.nativeId)
+                        add(shape)
+                        return
+                    }
+                    when (shape.kind) {
+                        KakaoMapOverlayKind.Polyline -> {
+                            val native = checkNotNull(nativeShapes[shape.nativeId] as? MapPolylineShape) {
+                                "Kakao Maps iOS polyline '${shape.nativeId}' is not present."
+                            }
+                            val (styleId, _) = nextPolylineStyle(shape)
+                            native.changeStyleAndDataWithStyleID(styleID = styleId, lines = lines(shape))
+                            updateVisibility(native, shape.visible)
+                        }
+                        KakaoMapOverlayKind.Polygon -> {
+                            val native = checkNotNull(nativeShapes[shape.nativeId] as? MapPolygonShape) {
+                                "Kakao Maps iOS polygon '${shape.nativeId}' is not present."
+                            }
+                            val (styleId, _) = nextPolygonStyle(shape)
+                            native.changeStyleAndDataWithStyleID(styleID = styleId, polygons = polygons(shape))
+                            updateVisibility(native, shape.visible)
+                        }
+                    }
+                }
+
+                override fun remove(nativeId: String) {
+                    nativeZOrders.remove(nativeId)
+                    when (nativeShapes.remove(nativeId)) {
+                        is MapPolylineShape -> layer.removeMapPolylineShapeWithShapeID(
+                            shapeID = nativeId,
+                            callback = null,
+                        )
+                        is MapPolygonShape -> layer.removeMapPolygonShapeWithShapeID(
+                            shapeID = nativeId,
+                            callback = null,
+                        )
+                    }
+                }
+
+                override fun restore(shapes: List<KakaoMapOverlayShape>) {
+                    layer.clearAllShapes()
+                    nativeShapes.clear()
+                    nativeZOrders.clear()
+                    shapes.forEach(::add)
+                }
+            },
+        )
+    }
+
+    private fun ComposeColor.toKakaoUIColor(): UIColor = toKakaoMapIosOverlayColor().let { rgba ->
+        UIColor(red = rgba.red, green = rgba.green, blue = rgba.blue, alpha = rgba.alpha)
     }
 
     private fun createMarkerReconciler(map: KakaoMap): KakaoMapIosMarkerReconciler {
@@ -197,7 +392,7 @@ internal class KakaoMapIosMapViewHost(
                 override val layerId: String = KAKAO_MAP_IOS_LAYER_ID
 
                 override fun add(marker: MapMarker) {
-                    val options = PoiOptions(styleID = styleId, poiID = marker.id)
+                    val options = PoiOptions(styleID = styleId, poiID = kakaoMapNativeElementId(KakaoMapNativeElementKind.Marker, marker.id))
                     marker.title?.let { options.addText(PoiText(text = it, styleIndex = 0u)) }
                     val poi = checkNotNull(
                         layer.addPoiWithOption(
@@ -224,7 +419,7 @@ internal class KakaoMapIosMapViewHost(
                 }
 
                 override fun remove(markerId: String) {
-                    layer.removePoiWithPoiID(poiID = markerId, callback = null)
+                    layer.removePoiWithPoiID(poiID = kakaoMapNativeElementId(KakaoMapNativeElementKind.Marker, markerId), callback = null)
                     pois.remove(markerId)
                 }
 
@@ -270,6 +465,8 @@ internal class KakaoMapIosMapViewHost(
 
     private companion object {
         const val VIEW_NAME = "weft_kakao_map"
+        const val KAKAO_MAP_IOS_SHAPE_LAYER_ID = "weft_overlays"
+        const val KAKAO_MAP_IOS_SHAPE_LAYER_Z_ORDER = 1L
     }
 }
 

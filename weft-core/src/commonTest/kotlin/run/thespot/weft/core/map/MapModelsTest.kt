@@ -74,6 +74,77 @@ class MapModelsTest {
     }
 
     @Test
+    fun polylineValidatesIdentityGeometryAndWidthAndCopiesPoints() {
+        val input = mutableListOf(LatLng(0.0, 0.0), LatLng(1.0, 1.0))
+        val polyline = MapPolyline(id = "route", points = input, widthDp = 0f)
+
+        input += LatLng(2.0, 2.0)
+
+        assertEquals(2, polyline.points.size)
+        assertFailsWith<IllegalArgumentException> { MapPolyline(" ", input) }
+        assertFailsWith<IllegalArgumentException> { MapPolyline("short", listOf(input.first())) }
+        assertFailsWith<IllegalArgumentException> { MapPolyline("bad-width", input, widthDp = -1f) }
+        assertFailsWith<IllegalArgumentException> { MapPolyline("nan-width", input, widthDp = Float.NaN) }
+        assertFailsWith<IllegalArgumentException> {
+            MapPolyline("infinite-width", input, widthDp = Float.POSITIVE_INFINITY)
+        }
+    }
+
+    @Test
+    fun polygonValidatesIdentityGeometryAndWidthsAndCopiesPoints() {
+        val input = mutableListOf(LatLng(0.0, 0.0), LatLng(1.0, 1.0), LatLng(2.0, 0.0))
+        val polygon = MapPolygon(id = "area", points = input, strokeWidthDp = 0f)
+
+        input.clear()
+
+        assertEquals(3, polygon.points.size)
+        assertFailsWith<IllegalArgumentException> { MapPolygon(" ", emptyList()) }
+        assertFailsWith<IllegalArgumentException> {
+            MapPolygon("short", listOf(LatLng(0.0, 0.0), LatLng(1.0, 1.0)))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MapPolygon("bad-stroke", polygon.points, strokeWidthDp = -1f)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MapPolygon("nan-stroke", polygon.points, strokeWidthDp = Float.NaN)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            MapPolygon("infinite-stroke", polygon.points, strokeWidthDp = Float.POSITIVE_INFINITY)
+        }
+    }
+
+    @Test
+    fun circleValidatesIdentityRadiusAndStrokeWidth() {
+        val center = LatLng(0.0, 0.0)
+        assertEquals(center, MapCircle("circle", center, 0.1).center)
+        listOf(Double.NaN, Double.POSITIVE_INFINITY, 0.0, -1.0).forEach { radius ->
+            assertFailsWith<IllegalArgumentException> { MapCircle("bad-radius", center, radius) }
+        }
+        assertFailsWith<IllegalArgumentException> { MapCircle(" ", center, 1.0) }
+        assertFailsWith<IllegalArgumentException> { MapCircle("bad-stroke", center, 1.0, strokeWidthDp = -1f) }
+        assertFailsWith<IllegalArgumentException> { MapCircle("nan-stroke", center, 1.0, strokeWidthDp = Float.NaN) }
+    }
+
+    @Test
+    fun mapContentCopiesAllOverlaySnapshots() {
+        val polyline = MapPolyline("route", listOf(LatLng(0.0, 0.0), LatLng(1.0, 1.0)))
+        val polygon = MapPolygon("area", listOf(LatLng(0.0, 0.0), LatLng(1.0, 0.0), LatLng(0.0, 1.0)))
+        val circle = MapCircle("radius", LatLng(0.0, 0.0), 100.0)
+        val polylines = mutableListOf(polyline)
+        val polygons = mutableListOf(polygon)
+        val circles = mutableListOf(circle)
+
+        val content = MapContent(emptyList(), polylines, polygons, circles)
+        polylines.clear()
+        polygons.clear()
+        circles.clear()
+
+        assertEquals(listOf(polyline), content.polylines)
+        assertEquals(listOf(polygon), content.polygons)
+        assertEquals(listOf(circle), content.circles)
+    }
+
+    @Test
     fun mapPluginExposesTheProviderNeutralContentSignature() {
         val plugin: MapPlugin = object : MapPlugin {
             @Composable

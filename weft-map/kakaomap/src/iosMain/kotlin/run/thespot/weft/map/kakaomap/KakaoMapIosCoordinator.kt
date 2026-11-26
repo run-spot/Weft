@@ -90,6 +90,9 @@ internal class KakaoMapIosCoordinator(
     private var content: MapContent = initialContent
     private var lastRenderedCamera: CameraPosition? = null
     private var lastRenderedMarkers: List<MapMarker>? = null
+    private var lastRenderedPolylines = emptyList<run.thespot.weft.core.map.MapPolyline>()
+    private var lastRenderedPolygons = emptyList<run.thespot.weft.core.map.MapPolygon>()
+    private var lastRenderedCircles = emptyList<run.thespot.weft.core.map.MapCircle>()
 
     private var currentOnError = onError
 
@@ -204,9 +207,13 @@ internal class KakaoMapIosCoordinator(
         val bounds = zoomBounds ?: return
         val normalizedCamera = camera.normalizeFor(bounds)
         val markers = content.markers
+        val polylines = content.polylines
+        val polygons = content.polygons
+        val circles = content.circles
         if (
             !force && !nativeStateMayBeOutOfSync &&
-            normalizedCamera == lastRenderedCamera && markers == lastRenderedMarkers
+            normalizedCamera == lastRenderedCamera && markers == lastRenderedMarkers &&
+            polylines == lastRenderedPolylines && polygons == lastRenderedPolygons && circles == lastRenderedCircles
         ) return
         val cameraToApply = normalizedCamera.takeIf {
             it != lastRenderedCamera || cameraMayBeOutOfSync
@@ -218,6 +225,9 @@ internal class KakaoMapIosCoordinator(
                 cameraMayBeOutOfSync = false
             }
             lastRenderedMarkers = markers
+            lastRenderedPolylines = polylines
+            lastRenderedPolygons = polygons
+            lastRenderedCircles = circles
             nativeStateMayBeOutOfSync = false
         } catch (throwable: Throwable) {
             nativeStateMayBeOutOfSync = true

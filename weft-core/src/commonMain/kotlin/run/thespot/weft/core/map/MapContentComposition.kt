@@ -83,7 +83,12 @@ internal class MapContentState(
 
         val next = MapContentBuilder.build(root)
         dirty = false
-        if (next.markers != published.value.markers) {
+        if (
+            next.markers != published.value.markers ||
+            next.polylines != published.value.polylines ||
+            next.polygons != published.value.polygons ||
+            next.circles != published.value.circles
+        ) {
             published.value = next
         }
     }
