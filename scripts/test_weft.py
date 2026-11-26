@@ -16,6 +16,9 @@ class GeneratedPathTests(unittest.TestCase):
             self.assertTrue(weft.is_generated_path(repo_root / "build" / "generated.md"))
             self.assertTrue(weft.is_generated_path(repo_root / ".gradle" / "cache.md"))
             self.assertTrue(weft.is_generated_path(repo_root / "checkouts" / "vendor" / "README.md"))
+            self.assertTrue(
+                weft.is_generated_path(repo_root / ".swiftpm-locks" / "default" / "swiftPMCheckout" / "artifacts" / "sdk" / "NOTICE.md")
+            )
             self.assertFalse(weft.is_generated_path(Path("/external/build/README.md")))
 
 
