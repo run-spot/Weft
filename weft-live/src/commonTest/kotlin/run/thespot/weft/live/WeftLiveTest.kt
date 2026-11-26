@@ -2,8 +2,11 @@ package run.thespot.weft.live
 
 import kotlin.coroutines.Continuation
 import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
 import kotlin.coroutines.startCoroutine
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -51,11 +54,17 @@ class WeftLiveTest {
             LiveActivityAvailability.PermissionRequired to LiveActivityFailureReason.PermissionRequired,
             LiveActivityAvailability.Disabled to LiveActivityFailureReason.Disabled,
         )) {
-            val plugin = install(RecordingPlatform(availability))
-            val error = assertFailsWith<LiveActivityException> {
-                runSuspend { plugin.start(LiveActivity("order", "Preparing")) }
+            assertFailure(reason) {
+                install(RecordingPlatform(availability)).start(LiveActivity("order", "Preparing"))
             }
-            assertEquals(reason, error.reason)
+            assertFailure(reason) {
+                install(RecordingPlatform(availability)).update(LiveActivity("order", "Preparing"))
+            }
+            assertFailure(reason) {
+                install(RecordingPlatform(availability)).end(
+                    LiveActivity("order", "Done", status = LiveActivityStatus.Completed),
+                )
+            }
         }
     }
 
@@ -121,9 +130,34 @@ class WeftLiveTest {
         assertEquals("unknown activity", error.message)
     }
 
-    private fun install(platform: RecordingPlatform): LiveActivityPlugin = Weft {
+    @Test
+    fun serializesOverlappingLifecycleCallsWithMutex() {
+        val platform = GatePlatform()
+        val plugin = install(platform)
+        val firstCompletion = Completion<Unit>()
+        val secondCompletion = Completion<Unit>()
+
+        suspend { plugin.start(LiveActivity("first", "First")) }.startCoroutine(firstCompletion)
+        assertTrue(platform.firstEntered)
+
+        suspend { plugin.start(LiveActivity("second", "Second")) }.startCoroutine(secondCompletion)
+        assertFalse(platform.secondEntered)
+
+        platform.releaseFirst()
+
+        assertTrue(platform.secondEntered)
+        assertTrue(firstCompletion.result?.isSuccess == true)
+        assertTrue(secondCompletion.result?.isSuccess == true)
+    }
+
+    private fun install(platform: LiveActivityPlatform): LiveActivityPlugin = Weft {
         install(WeftLive) { this.platform = platform }
     }.get()
+
+    private fun assertFailure(reason: LiveActivityFailureReason, operation: suspend () -> Unit) {
+        val error = assertFailsWith<LiveActivityException> { runSuspend(operation) }
+        assertEquals(reason, error.reason)
+    }
 
     private class RecordingPlatform(
         private val availability: LiveActivityAvailability = LiveActivityAvailability.Available,
@@ -151,6 +185,38 @@ class WeftLiveTest {
             failure?.let { throw it }
             operations += "end:${activity.id}"
         }
+    }
+
+    private class GatePlatform : LiveActivityPlatform {
+        var firstEntered: Boolean = false
+        var secondEntered: Boolean = false
+        private var firstRelease: Continuation<Unit>? = null
+
+        override fun availability(): LiveActivityAvailability = LiveActivityAvailability.Available
+
+        override suspend fun start(activity: LiveActivity) {
+            if (activity.id == "first") {
+                firstEntered = true
+                suspendCoroutine { continuation -> firstRelease = continuation }
+            } else {
+                secondEntered = true
+            }
+        }
+
+        override suspend fun update(activity: LiveActivity): Unit = Unit
+
+        override suspend fun end(activity: LiveActivity): Unit = Unit
+
+        fun releaseFirst(): Unit = firstRelease!!.resume(Unit)
+    }
+}
+
+private class Completion<T> : Continuation<T> {
+    override val context = EmptyCoroutineContext
+    var result: Result<T>? = null
+
+    override fun resumeWith(result: Result<T>) {
+        this.result = result
     }
 }
 

@@ -45,6 +45,18 @@ class LiveActivityTest {
             LiveActivity("id", "title", deepLink = "weft://orders/has\\backslash")
         }
         assertFailsWith<IllegalArgumentException> {
+            LiveActivity("id", "title", deepLink = "weft://bad^host/path")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LiveActivity("id", "title", deepLink = "weft://host/[]")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LiveActivity("id", "title", deepLink = "weft://:8080")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            LiveActivity("id", "title", deepLink = "weft://host:not-a-port")
+        }
+        assertFailsWith<IllegalArgumentException> {
             LiveActivity("id", "title", startedAtEpochMillis = 20, endsAtEpochMillis = 19)
         }
         assertFailsWith<IllegalArgumentException> {

@@ -133,10 +133,64 @@ internal fun isValidDeepLink(value: String): Boolean {
     } else {
         value.substring(authorityStart, authorityEnd)
     }
-    return authority.isNotEmpty()
+    if (!isValidAuthority(authority)) return false
+
+    val componentStart = if (authorityEnd == -1) value.length else authorityEnd
+    val queryStart = value.indexOf('?', authorityStart)
+    val fragmentStart = value.indexOf('#', authorityStart)
+    val pathEnd = listOfNotNull(
+        queryStart.takeUnless { it == -1 },
+        fragmentStart.takeUnless { it == -1 },
+    ).minOrNull() ?: value.length
+    if (!isValidUriComponent(value.substring(componentStart, pathEnd), allowQuestion = false)) {
+        return false
+    }
+
+    if (queryStart >= 0 && (fragmentStart < 0 || queryStart < fragmentStart)) {
+        val queryEnd = if (fragmentStart >= 0) fragmentStart else value.length
+        if (!isValidUriComponent(value.substring(queryStart + 1, queryEnd), allowQuestion = true)) return false
+    }
+    if (fragmentStart >= 0 && !isValidUriComponent(value.substring(fragmentStart + 1), allowQuestion = true)) {
+        return false
+    }
+    return true
 }
 
 private fun Char.isHexDigit(): Boolean = this in '0'..'9' || this in 'a'..'f' || this in 'A'..'F'
+
+private fun isValidAuthority(authority: String): Boolean {
+    if (authority.isEmpty() || authority.any { !it.isAuthorityChar() }) return false
+    val hostPort = authority.substringAfterLast('@')
+    if (hostPort.isEmpty()) return false
+
+    if (hostPort.startsWith('[')) {
+        val closingBracket = hostPort.indexOf(']')
+        if (closingBracket <= 1) return false
+        val suffix = hostPort.substring(closingBracket + 1)
+        return suffix.isEmpty() ||
+            (suffix.startsWith(':') && suffix.length > 1 && suffix.drop(1).all(Char::isDigit))
+    }
+
+    val firstColon = hostPort.indexOf(':')
+    if (firstColon == -1) return true
+    if (hostPort.indexOf(':', firstColon + 1) >= 0) return false
+    val host = hostPort.substring(0, firstColon)
+    val port = hostPort.substring(firstColon + 1)
+    return host.isNotEmpty() && port.isNotEmpty() && port.all(Char::isDigit)
+}
+
+private fun Char.isAuthorityChar(): Boolean =
+    isUnreserved() || isSubDelimiter() || this in ":@[]%"
+
+private fun isValidUriComponent(value: String, allowQuestion: Boolean): Boolean =
+    value.all {
+        it.isUnreserved() || it.isSubDelimiter() || it in ":@/%" || (allowQuestion && it == '?')
+    }
+
+private fun Char.isUnreserved(): Boolean =
+    this in 'A'..'Z' || this in 'a'..'z' || this in '0'..'9' || this in "-._~"
+
+private fun Char.isSubDelimiter(): Boolean = this in "!$&'()*+,;="
 
 /** Exact floor(current * 100 / total), without overflowing a Long or using floating point. */
 internal fun floorPercentageWithoutOverflow(current: Long, total: Long): Int {
