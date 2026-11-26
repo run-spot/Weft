@@ -41,7 +41,7 @@ Connect the common API with expect/actual or an injected platform provider when 
 
 ### Maven Central
 
-Publish each capability/provider leaf as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The group is `run.thespot.weft`, with current artifact IDs `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`; `:weft-map` is a Gradle namespace, not a publication. The `weft-bom` artifact aligns those four artifacts, and releases are coordinated. `weft-core` carries the plugin installation and provider-neutral map contracts; it contains no vendor or platform types. The Kakao Android SDK is a runtime dependency of `weft-kakaomap`, so Android consumers must configure Kakao's Maven repository. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+Publish each capability/provider leaf as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The group is `run.thespot.weft`, with default artifact IDs `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`; `:weft-map` is a Gradle namespace, not a publication. The `weft-bom` artifact aligns those four artifacts, and releases are coordinated. `:weft-live` is a verified candidate whose BOM constraint and publication are enabled only by the explicit `weftLiveReleaseEnabled` gate after its external Apple consumer path is proven. `weft-core` carries the plugin installation and provider-neutral map contracts; it contains no vendor or platform types. The Kakao Android SDK is a runtime dependency of `weft-kakaomap`, so Android consumers must configure Kakao's Maven repository. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
 
 The build conventions, module coordinates, metadata, signing hooks, and staged release workflow are described in [Bridge library modules](library-modules.md) and [Maven Central publishing](maven-central-publishing.md). Nothing has been published yet.
 
@@ -52,6 +52,21 @@ Use SwiftPM inside the KMP bridge build to import Objective-C/Clang-visible SDK 
 If native Swift consumers need the Kotlin framework directly, that is a separate XCFramework/SwiftPM binary distribution with its own public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target.
 
 Kotlin labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. The observed local Kakao pilot on KGP 2.4.21 is not official support: runtime simulator tests on this Intel host and a remote Maven consumer remain unvalidated. Direct Swift consumers would need a separately published XCFramework with a versioned Package.swift, checksum, supported Apple architectures, and minimum deployment target.
+
+### Live activity capability
+
+`:weft-live` provides a provider-neutral `LiveActivity` snapshot and suspend lifecycle through
+`WeftLive`. Android renders the snapshot as a tagged notification (`id` is the tag and notification
+ID `0` is used consistently), with API 36 `ProgressStyle` promotion when available and a standard
+notification fallback on older releases. Samsung Now Bar/Now Brief placement remains OEM policy;
+the adapter uses only public notification APIs and does not promise private Samsung behavior.
+
+The Apple adapter uses the local `WeftLiveKit` SwiftPM façade. ActivityKit owns the native activity
+identity and content state, while the façade serializes native writes and exposes only
+Objective-C-compatible callbacks to Kotlin. The façade also ships generic Lock Screen and Dynamic
+Island views, but the app owns WidgetBundle registration, branding, the `NSSupportsLiveActivities`
+Info.plist key, and deep-link handling. The package is source-checkout-only in this milestone and
+is not a release-ready transitive Maven dependency.
 
 ## Pilot acceptance criteria
 

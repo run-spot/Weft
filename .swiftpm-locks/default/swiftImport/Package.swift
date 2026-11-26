@@ -3,7 +3,7 @@ import PackageDescription
 let package = Package(
   name: "KotlinMultiplatformLinkedPackage",
   platforms: [
-    .iOS("15.0")
+    .iOS("16.1")
   ],
   products: [
     .library(
@@ -13,12 +13,14 @@ let package = Package(
     )
   ],
   dependencies: [
+    .package(path: "subpackages/_weft-live"),
     .package(path: "subpackages/_weft-map_kakaomap")
   ],
   targets: [
     .target(
       name: "KotlinMultiplatformLinkedPackage",
       dependencies: [
+        .product(name: "_weft-live", package: "_weft-live"),
         .product(name: "_weft-map_kakaomap", package: "_weft-map_kakaomap")
       ]
     )

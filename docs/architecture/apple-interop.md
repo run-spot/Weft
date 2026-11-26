@@ -28,6 +28,8 @@ native Swift SDK
 - androidMain owns Android SDK implementations.
 - iosMain translates between the Kotlin contract and the Apple SDK façade, including callbacks, errors, threading, and lifecycle.
 - The SwiftPM façade exposes the smallest Objective-C-compatible API surface needed by Kotlin/Native.
+- The `:weft-live` ActivityKit façade keeps Swift concurrency and ActivityKit types behind that
+  boundary; `iosMain` receives ordinary callbacks and bridges them to cancellable suspend calls.
 - Kotlin owns app startup and `UIApplicationDelegate`-level product behavior, including URL callbacks, permission consent, and app policy. An Xcode-required Swift app entry is only a bootstrap/forwarder into Kotlin.
 - Implement app screens, state, and business behavior in Kotlin. Do not add SwiftUI app screens; native Swift product code is reserved for Xcode widgets/extensions.
 
@@ -51,9 +53,35 @@ Before integrating an SDK, validate:
 
 Keep the package dependency, `.swiftpm-locks/default/swiftImport/Package.resolved`, and generated linkage package with the KMP bridge source. Kakao's package contains SDK assets; verify the generated `KakaoMapsSDK-SPM_KakaoMapsSDK-SPM.bundle/assets/KakaoMapsSDKBundle.plist` in the built app. The consuming application depends on the approved Weft bridge artifact, not directly on the vendor SDK package. For Gradle/KMP consumers, verify that the selected Kotlin Gradle Plugin propagates and resolves the bridge's transitive SwiftPM dependency when linking the consumer's native framework.
 
+## Weft Live Activity façade
+
+The live-activity candidate keeps its local SwiftPM package at
+`weft-live/iosInterop/WeftLiveKit`. The package targets iOS 16.1 and provides:
+
+- `WeftLiveActivityBridge`, an Objective-C-compatible result/callback façade for start, update,
+  and end operations;
+- `WeftLiveActivityAttributes` and a Codable content snapshot for ActivityKit identity/state;
+- a FIFO native-operation chain so a cancelled Kotlin waiter cannot let a later write overtake an
+  earlier ActivityKit write; and
+- `WeftLiveActivityWidget`, a reusable generic Lock Screen and Dynamic Island presentation with
+  accessibility labels and optional progress/timer/ETA rows.
+
+The consuming app must add `NSSupportsLiveActivities`, register the widget in its WidgetBundle,
+route the optional deep link, and link the same package into both the app and widget extension.
+This checked-in package is an integration source, not a versioned remote SwiftPM distribution.
+Consequently `:weft-live` is verified in the repository but remains outside the default BOM and
+coordinated release until a separate external consumer proves the remote package/linkage path.
+The generated `KotlinMultiplatformLinkedPackage` umbrella currently links both the live and Kakao
+map products, so that combined package has an iOS 16.1 deployment floor even for consumers that
+only call the map API. Its generated Kakao SwiftPM wrapper also reports iOS 16.1, while the
+`:weft-map:kakaomap` framework build explicitly retains its iOS 13.0 compiler minimum. Therefore
+the checked-in combined SwiftPM import path is not an iOS 13 deployment path for map-only clients;
+a separate map-only consumer package must be generated and validated before claiming that support.
+This source-checkout umbrella constraint is not a change to the published Kakao leaf's target.
+
 ## Maven Central and SwiftPM
 
-Publish the Kotlin bridge library to Maven Central as a Weft KMP artifact for Android and KMP Gradle consumers. This Maven artifact does not embed the Swift package source. The official Kotlin guide says the Gradle plugin supplies native machine code for transitive SwiftPM dependencies, but this integration remains Alpha; verify that behavior with the exact KGP version, remote publication, consumer build, and lock-file setup before release. The Kakao pilot's local Xcode fixture does not substitute for a remote Maven consumer.
+Publish the Kotlin bridge library to Maven Central as a Weft KMP artifact for Android and KMP Gradle consumers. This Maven artifact does not embed the Swift package source. The official Kotlin guide says the Gradle plugin supplies native machine code for transitive SwiftPM dependencies, but this integration remains Alpha; verify that behavior with the exact KGP version, remote publication, consumer build, and lock-file setup before release. The Kakao pilot's local Xcode fixture does not substitute for a remote Maven consumer. The live-activity candidate has the additional `weftLiveReleaseEnabled` gate because its local façade has not yet become a versioned remote package.
 
 SwiftPM consumers need a separate Swift package distribution. A common binary flow publishes an XCFramework ZIP, a Package.swift binary target, checksum, and version tag. Therefore a future bridge library may use one source repository but still needs separate Maven Central and SwiftPM release artifacts.
 

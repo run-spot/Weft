@@ -3,6 +3,7 @@ kotlin = "2.4.21"
 agp = "9.3.1"
 maven-publish = "0.37.0"
 compose-runtime = "1.12.1"
+kotlinx-coroutines = "1.10.2"
 
 [libraries]
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
@@ -14,3 +15,4 @@ compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "compose-ru
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "compose-runtime" }
 kakao-maps-android = { module = "com.kakao.maps.open:android", version = "2.15.2" }
 lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version = "2.10.0-alpha05" }
+kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }

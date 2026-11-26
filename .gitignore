@@ -2,9 +2,11 @@
 .gradle/
 .kotlin/
 build/
+.build/
 out/
 .idea/
 __pycache__/
 local.properties
 *.xcuserstate
 DerivedData/
+.worktrees/
