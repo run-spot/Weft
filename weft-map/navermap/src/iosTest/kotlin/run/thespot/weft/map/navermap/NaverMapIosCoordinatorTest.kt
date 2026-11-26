@@ -62,11 +62,34 @@ class NaverMapIosCoordinatorTest {
         assertEquals(20f, host.renders.single().camera?.zoom)
         assertEquals(90f, host.renders.single().camera?.bearing)
         assertEquals(listOf("latest"), host.renders.single().content.markers.map(MapMarker::id))
+        coordinator.update(
+            WeftMapState(CameraPosition(LatLng(37.5, 127.0), zoom = 25f, bearing = 450f)),
+            contents.content("latest", "second"),
+            null,
+        )
+        assertEquals(null, host.renders.last().camera)
         coordinator.onWindowDetached()
         assertEquals(1, host.calls.count { it == "pause" })
         coordinator.onWindowAttached(320.0, 640.0)
         assertEquals(1, host.preparations)
         assertEquals(2, host.calls.count { it == "activate" })
+    }
+
+    @Test
+    fun reportsOnlyOneErrorForAFailedGeneration() {
+        val host = FakeHost()
+        val errors = mutableListOf<Throwable>()
+        val coordinator = coordinator(host, onError = errors::add)
+        coordinator.onWindowAttached(320.0, 640.0)
+        host.failNextRender = IllegalStateException("first render failed")
+        host.ready()
+        coordinator.update(
+            WeftMapState(CameraPosition(LatLng(37.5, 127.0), zoom = 16f)),
+            contents.content("retry"),
+            errors::add,
+        )
+        assertEquals(1, errors.size)
+        assertTrue(errors.single() is NaverMapException)
     }
 
     @Test
@@ -98,6 +121,7 @@ class NaverMapIosCoordinatorTest {
         var preparations = 0
         private var ready: ((NaverMapIosZoomBounds) -> Unit)? = null
         private var error: ((Throwable) -> Unit)? = null
+        var failNextRender: Throwable? = null
         override fun prepare(
             ncpKeyId: String,
             initialCamera: CameraPosition,
@@ -110,7 +134,13 @@ class NaverMapIosCoordinatorTest {
             error = onError
         }
         override fun activate() { calls += "activate" }
-        override fun render(camera: CameraPosition?, content: MapContent) { renders += Render(camera, content) }
+        override fun render(camera: CameraPosition?, content: MapContent) {
+            failNextRender?.let { failure ->
+                failNextRender = null
+                throw failure
+            }
+            renders += Render(camera, content)
+        }
         override fun pause() { calls += "pause" }
         override fun reset() { calls += "reset" }
         fun ready() { ready?.invoke(NaverMapIosZoomBounds(2f, 20f)) }

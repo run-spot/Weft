@@ -1,7 +1,6 @@
 package run.thespot.weft.map.navermap
 
 import run.thespot.weft.core.map.CameraPosition
-import run.thespot.weft.core.map.LatLng
 import kotlin.math.roundToInt
 
 /** Native-neutral camera limits read from the Naver map view. */
@@ -43,5 +42,3 @@ internal interface NaverMapIosNativeLayer : NaverMapIosOverlayLayer {
     fun removeDelegates()
     fun release()
 }
-
-internal fun LatLng.toNaverIosCoordinates(): Pair<Double, Double> = latitude to longitude
