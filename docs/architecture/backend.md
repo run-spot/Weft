@@ -42,6 +42,8 @@ The app may contain the Supabase project URL and a publishable key. Protect user
 
 The application allowlist remains closed: app modules must not add the Supabase Kotlin SDK as a one-off dependency. App code uses `weft-login` and approved Ktor/Ktorfit networking. Provider-specific implementation belongs inside a published Weft artifact and must follow its own library policy.
 
+For native OAuth sign-in, use `:weft-login` with the Supabase project URL, publishable key, and a registered app callback URL. Android apps can additionally enable Restore Credentials after configuring Supabase Passkeys and the Android relying-party origin. Passkey support is currently experimental; see the [Weft Supabase login guide](login.md) before enabling this path.
+
 ## Profile mapping
 
 | Team choice | KMP core with Kotlin platform UI | Shared Compose UI |
