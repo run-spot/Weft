@@ -222,15 +222,21 @@
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinator.kt`
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializer.kt`
 
+`NaverMapAndroidCoordinator.kt` owns the `NaverMapAndroidHost` interface used by the fake
+coordinator tests; the concrete `MapView` implementation is created in Task 4.
+
 - [ ] **Step 1: Write failing coordinator tests around a fake host**
 
   Add tests named `startsAfterAttachAndResumeOnce`, `pauseBeforeStartDoesNotTouchHost`,
   `rendersLatestStateWhenMapBecomesReady`, `normalizesCameraToNativeBounds`,
-  `lateCallbacksAreIgnoredAfterFinish`, `reportsNativeFailureOnce`, and
-  `cameraRollbackFailureIsSuppressed`. Define a fake `NaverMapAndroidHost` in the test source with
-  explicit lifecycle/render call logs, configurable zoom bounds, and controllable ready/error
-  callbacks. Assert user pan is preserved when only content changes by passing a null camera to
-  the host render call. In `NaverMapAndroidSdkInitializerTest.kt`, add
+  `lateCallbacksAreIgnoredAfterFinish`, `reportsNativeFailureOnce`,
+  `cameraRollbackRestoresPreviousCamera`, and `cameraRollbackFailureIsSuppressed`. Define a fake
+  `NaverMapAndroidHost` in the test source with
+  explicit lifecycle/render call logs, configurable zoom and tilt bounds, and controllable
+  ready/error callbacks. Assert exact target latitude/longitude, rounded/clamped zoom, clamped
+  tilt, and normalized bearing passed to the fake host. Assert user pan is preserved when only
+  content changes by passing a null camera to the host render call. In
+  `NaverMapAndroidSdkInitializerTest.kt`, add
   `sameKeyInitializesOnce` and `conflictingKeyDoesNotReinitialize` using an injectable
   `initializeSdk: (String) -> Unit` seam and `resetForTest`.
 
@@ -275,11 +281,13 @@
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
-  ./gradlew :weft-map:navermap:testAndroidHostTest --tests '*NaverMapAndroidCoordinatorTest'
+  ./gradlew :weft-map:navermap:testAndroidHostTest \
+    --tests '*NaverMapAndroidCoordinatorTest' \
+    --tests '*NaverMapAndroidSdkInitializerTest' && \
   git add weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinator.kt \
     weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializer.kt \
     weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinatorTest.kt \
-    weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializerTest.kt
+    weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializerTest.kt && \
   git commit -m "feat: add Naver Android map lifecycle coordinator"
   ```
 
@@ -295,7 +303,10 @@
 
 - [ ] **Step 1: Write failing reconciler and lifecycle-bridge tests**
 
-  Add fake native marker/shape layers and a fake `NaverMapAndroidViewLifecycle` seam; tests named `addsUpdatesAndRemovesByStableId`,
+  Add fake native marker/shape layers and injectable seams for `MapView` construction/method calls,
+  `SavedStateRegistryOwner` state consumption/provider registration/unregistration, and
+  `ComponentCallbacks2` registration/unregistration. Use a fake
+  `NaverMapAndroidViewLifecycle` seam; tests named `addsUpdatesAndRemovesByStableId`,
   `keepsNativeIdentityForStyleAndVisibilityUpdates`, `rollsBackAfterMutationFailure`,
   `marksLayerUnsynchronizedWhenRollbackFails`, `forwardsSavedStateAndLowMemoryCallbacks`,
   `restoresEmptyAndRestoredSavedStateBundles`, `unregistersSavedStateProvider`,
@@ -353,23 +364,25 @@
   during finish.
 
   In `NaverMapPlatform.android.kt`, use `LocalLifecycleOwner`, `AndroidView`, and `DisposableEffect`.
-  Define the fakeable `NaverMapAndroidViewLifecycle`/saved-state bridge in this platform file so
-  tests can drive callbacks without a real view. Obtain `SavedStateRegistryOwner` from the
-  attached view tree with `ViewTreeSavedStateRegistryOwner.get(mapView)`, consume a restored
-  bundle before `onCreate`, register a stable key with `registerSavedStateProvider`, and remove
-  it with `unregisterSavedStateProvider` during disposal. If the owner is not available until
-  attach, defer registration while using an empty bundle for initial creation. Register a
-  `ComponentCallbacks2` for `onLowMemory`; unregister both bridges on disposal. Forward attach/
-  detach and all five lifecycle callbacks to the host/coordinator. Do not use a Fragment or
-  expose Android classes through the common expect declaration.
+  Define injectable `NaverMapAndroidMapViewFactory`, `NaverMapAndroidSavedStateBridge`, and
+  `NaverMapAndroidComponentCallbacksBridge` interfaces in this platform file, with production
+  adapters around `MapView`, `ViewTreeSavedStateRegistryOwner.get(mapView)`, and the owning
+  `Context`. Tests inject fakes for all three, so no real SDK view or saved-state owner is needed.
+  Consume a restored bundle before `onCreate`, register a stable key with
+  `registerSavedStateProvider`, and remove it with `unregisterSavedStateProvider` during
+  disposal. If the owner is not available until attach, defer registration while using an empty
+  bundle for initial creation. Register a `ComponentCallbacks2` for `onLowMemory`; unregister
+  both bridges on disposal. Forward attach/detach and all five lifecycle callbacks to the host/
+  coordinator. Do not use a Fragment or expose Android classes through the common expect
+  declaration.
 
 - [ ] **Step 5: Run Android provider tests and commit**
 
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
-  ./gradlew :weft-map:navermap:testAndroidHostTest :weft-map:navermap:check
-  git add weft-map/navermap/src/androidMain weft-map/navermap/src/androidHostTest
+  ./gradlew :weft-map:navermap:testAndroidHostTest :weft-map:navermap:check && \
+  git add weft-map/navermap/src/androidMain weft-map/navermap/src/androidHostTest && \
   git commit -m "feat: implement Naver Android map adapter"
   ```
 
