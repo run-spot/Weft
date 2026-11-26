@@ -46,8 +46,8 @@ jobs:
           ./gradlew
           :weft-map:kakaomap:linkDebugFrameworkIosArm64
           :weft-map:kakaomap:linkDebugFrameworkIosSimulatorArm64
-          :weft-login:linkDebugFrameworkIosArm64
-          :weft-login:linkDebugFrameworkIosSimulatorArm64
+          :weft-login:compileKotlinIosArm64
+          :weft-login:compileKotlinIosSimulatorArm64
           :weft-push:linkDebugFrameworkIosArm64
           :weft-push:linkDebugFrameworkIosSimulatorArm64
           :weft-live:linkDebugFrameworkIosArm64
