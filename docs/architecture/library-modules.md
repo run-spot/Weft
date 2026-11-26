@@ -10,12 +10,12 @@ The bridge-library workspace is a multi-project Gradle build inside the Weft rep
 | `:weft-map` | none | Namespace parent for provider leaves | No tasks or publication |
 | `:weft-map:kakaomap` | `weft-kakaomap` | Kakao Maps provider binding and Android/iOS adapters | M1: implemented; local fixture passes, CI/remote consumer pending |
 | `:weft-login` | `weft-login` | Cross-platform sign-in capability | M0: build and publication skeleton |
-| `:weft-push` | `weft-push` | Push registration and notification capability | M0: build and publication skeleton |
+| `:weft-push` | `weft-push` | FID-based registration, common message processing, and OS notification presentation backed by Firebase Cloud Messaging | M2: Android presenter and iOS app/extension processor bridge |
 | `:weft-live` | `weft-live` | Finite live-activity lifecycle with Android notifications and an ActivityKit/WidgetKit façade | M1: candidate implemented; external Apple consumer and remote SwiftPM source pending |
 | `:weft-bom` | `weft-bom` | Maven BOM aligning the default four KMP artifacts; optionally includes `weft-live` | M0: build and publication skeleton |
 | `:weft-gradle-plugin` | not published | Gradle plugin with the offline wiring check and the aggregated health check | M1: plugin and health verification |
 
-Published artifacts use group `run.thespot.weft` and shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. Login and push remain scaffolding; the Kakao provider is implemented but is not a release candidate until CI and a separately published consumer validate its Android/iOS path. `:weft-live` is always included in root verification, but its BOM constraint and coordinated publication remain behind `weftLiveReleaseEnabled=false` until the versioned remote SwiftPM and external consumer gates pass.
+Published artifacts use group `run.thespot.weft` and shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. Login remains scaffolding. Push has its public API and first Firebase adapters, but is not a release candidate until CI and a separate Android/iOS consumer validate both platform paths. The Kakao provider also remains short of release readiness until CI and a separately published consumer validate its Android/iOS path. `:weft-live` is always included in root verification, but its BOM constraint and coordinated publication remain behind `weftLiveReleaseEnabled=false` until the versioned remote SwiftPM and external consumer gates pass.
 
 ## Login capability roadmap
 
@@ -84,6 +84,8 @@ Each module uses the standard KMP source-set boundaries:
 ~~~
 
 Only create a source-set implementation when a module milestone needs it. Keep Android and Apple SDK dependencies in their platform source sets. The `:weft-map` parent is only a namespace; `:weft-map:kakaomap` is the published leaf. The BOM is metadata-only and constrains `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push` to the shared release version; it does not add runtime dependencies. When the explicit release gate is enabled, it also constrains `weft-live`. `:weft-core` owns the provider-neutral map contract.
+
+`:weft-push` owns the provider-neutral registration ID, message-processing contract, notification request, presenter API, and permission status. The sending backend constructs the FCM data payload; Android and iOS adapters present common processor results. Its FCM setup and OS lifecycle boundaries are described in [Push notifications](push-notifications.md).
 
 ## Platform targets
 
