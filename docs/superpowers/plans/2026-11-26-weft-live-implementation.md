@@ -22,9 +22,10 @@
 - Modify: `gradle.properties`
 
 - [ ] Add `:weft-live` to settings and configure KMP/Maven publication, `api(project(":weft-core"))`, coroutines implementation, Android host tests, iOS arm64/simulator targets, and local SwiftPM import with the documented iOS 16.1 floor.
+- [ ] Add the minimal `iosInterop/WeftLiveKit` SwiftPM manifest, source target, and test-target skeleton before invoking Gradle's local-package validation; Task 5 fills in the façade implementation.
 - [ ] Add the coroutines version to the catalog and `weftLiveReleaseEnabled=false` to Gradle properties without changing the pinned Kotlin toolchain.
 - [ ] Document Android/iOS setup, ActivityKit limitations, release-gate status, and module-specific validation.
-- [ ] Run `./gradlew :weft-live:tasks` with the Android SDK environment and confirm the new leaf/configuration tasks are registered.
+- [ ] Run `./gradlew :weft-live:tasks` and `./gradlew :weft-live:validateLocalSwiftPMDependencies` with the Android SDK environment and confirm the new leaf/configuration tasks and package path are registered.
 - [ ] Commit `feat: scaffold weft live capability module`.
 
 ### Task 2: Add the validated common model and failing tests first
@@ -33,7 +34,7 @@
 - Create: `weft-live/src/commonMain/kotlin/run/thespot/weft/live/LiveActivity.kt`
 - Create: `weft-live/src/commonTest/kotlin/run/thespot/weft/live/LiveActivityTest.kt`
 
-- [ ] Write tests for ID/text/UTF-8/deep-link/timestamp/progress validation, exact floor percentage without overflow, terminal-state constraints, and the 4,096-byte boundary helper contract.
+- [ ] Write tests for ID/text/UTF-8/deep-link/timestamp/progress validation, exact floor percentage without overflow, and terminal-state constraints. The ActivityKit JSON 4,096-byte boundary belongs to the Swift façade tests in Task 5.
 - [ ] Run the focused common test and observe the expected failure before production implementation.
 - [ ] Implement enums, immutable models, UTF-8 sizing, URI validation, overflow-safe percentage, and public exception/failure types with explicit API mode.
 - [ ] Run `./gradlew :weft-live:allTests` (or the focused common test task) and verify the model tests pass.
@@ -45,7 +46,7 @@
 - Create/modify: `weft-live/src/commonMain/kotlin/run/thespot/weft/live/WeftLive.kt`
 - Modify: `weft-live/src/commonTest/kotlin/run/thespot/weft/live/LiveActivityTest.kt`
 
-- [ ] Add failing tests for missing platform, duplicate installation through `Weft`, valid start/update/end states, invalid-state precedence over availability, availability mapping, unknown IDs delegated to the platform, and serialized cancellation/operation ordering.
+- [ ] Add failing tests for missing platform, duplicate installation through `Weft`, valid start/update/end states, invalid-state precedence over availability, availability mapping, unknown IDs delegated to the platform, `end(Cancelled)` teardown behavior under Disabled/PermissionRequired versus Unsupported/NotConfigured, and serialized cancellation/operation ordering.
 - [ ] Run the focused tests and capture the red failure.
 - [ ] Implement `LiveActivityPlatform`, `LiveActivityPlugin`, `WeftLiveConfig`, `WeftLive`, `prepare`, and a mutex-serialized delegating plugin. Keep native types out of commonMain and keep no in-memory ID registry.
 - [ ] Run common tests and `:weft-live:check` to verify the green state.
