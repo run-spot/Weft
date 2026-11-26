@@ -21,6 +21,7 @@
 - Modify: `gradle/libs.versions.toml`
 - Create: `weft-map/navermap/build.gradle.kts`
 - Modify: `weft-bom/build.gradle.kts`
+- Modify: `weft-bom/AGENTS.md`
 - Modify: `build.gradle.kts`
 - Modify: `weft-map/AGENTS.md`
 - Modify: `AGENTS.md`
@@ -48,9 +49,9 @@
   )
   ```
 
-  Keep `commonMain` dependent only on `:weft-core`; put Compose UI, lifecycle compose, and
-  `libs.naver.maps.android` in `androidMain`. Do not add vendor SDK dependencies to
-  `commonMain`.
+  Set `discoverClangModulesImplicitly = true` like the Kakao leaf. Keep `commonMain` dependent
+  only on `:weft-core`; put Compose UI, lifecycle compose, and `libs.naver.maps.android` in
+  `androidMain`. Do not add vendor SDK dependencies to `commonMain`.
 
 - [ ] **Step 3: Add root verification and release task wiring before provider source exists**
 
@@ -61,7 +62,8 @@
   group `com.naver.maps` and artifact `map-sdk`. Add `verifyNaverMapPublication` to `verify`.
   Update `gradle.taskGraph.whenReady` assertions and `publishWeftReleaseToMavenCentral` so
   `:weft-map:navermap:check` and `:weft-map:navermap:publishToMavenCentral` are explicit members
-  of verification/release staging and the namespace is never published.
+  of verification/release staging and the namespace is never published. Update
+  `verifyWeftBomPublication`'s expected artifact list to include `weft-navermap`.
 
 - [ ] **Step 4: Update repository guidance for the second leaf**
 
@@ -102,6 +104,8 @@
 - Create: `weft-map/navermap/src/commonMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.kt`
 - Create: `weft-map/navermap/src/commonMain/kotlin/run/thespot/weft/map/navermap/NaverMapOverlayShapes.kt`
 - Create: `weft-map/navermap/src/commonMain/kotlin/run/thespot/weft/map/navermap/NaverMapHostTeardown.kt`
+- Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.android.kt`
+- Create: `weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.ios.kt`
 
 - [ ] **Step 1: Write failing common tests for configuration and registration**
 
@@ -120,9 +124,8 @@
   ./gradlew :weft-map:navermap:testAndroidHostTest
   ```
 
-  Expected: compilation fails because `NaverMap`, `NaverMapConfig`, and `NaverMapException`
-  do not exist yet. Fix only test/setup errors; do not implement production code before this
-  failure is observed.
+  Expected: compilation fails because `NaverMap` and `NaverMapConfig` do not exist yet. Fix only
+  test/setup errors; do not implement production code before this failure is observed.
 
 - [ ] **Step 3: Implement the minimal public provider entry point**
 
@@ -145,13 +148,16 @@
 
 - [ ] **Step 5: Write failing shape conversion and teardown tests**
 
-  Add tests named `usesStableKindPrefixedIdsAndPreservesOrder`, `mapsNaverCircleWithoutPolygonApproximation`,
-  `keepsStyleVisibilityAndZIndex`, `runsAllTeardownActionsAfterFailure`, and
-  `suppressesLaterTeardownFailuresOnTheFirstFailure`. Build `MapContent` with one polyline,
-  polygon, and circle and assert the Naver-neutral records preserve input order, use
-  `weft:polyline:<id>`, `weft:polygon:<id>`, and `weft:circle:<id>`, and keep the circle center
-  and radius as circle fields. Test that teardown attempts cleanup, finish, and reference
-  clearing even when earlier actions throw.
+  Add tests named `usesStableKindPrefixedIdsAndDeterministicKindOrder`,
+  `mapsMarkersAndNaverCircleWithoutPolygonApproximation`, `keepsStyleVisibilityAndZIndex`,
+  `runsAllTeardownActionsAfterFailure`, and `suppressesLaterTeardownFailuresOnTheFirstFailure`.
+  Supply separate `List<MapMarker>`, `List<MapPolyline>`, `List<MapPolygon>`, and
+  `List<MapCircle>` arguments to the converter seam because `MapContent`'s constructor is internal
+  to `:weft-core`. Assert the documented deterministic order is all markers, then polylines,
+  then polygons, then circles; preserve each list's order; use
+  `weft:marker:<id>`, `weft:polyline:<id>`, `weft:polygon:<id>`, and `weft:circle:<id>`; and
+  keep circle center/radius as circle fields. Test that teardown attempts cleanup, finish, and
+  reference clearing even when earlier actions throw.
 
 - [ ] **Step 6: Run the new tests and verify the expected failure**
 
@@ -167,19 +173,32 @@
 
   In `NaverMapOverlayShapes.kt`, define internal overlay kinds for marker, polyline, polygon,
   and circle; define an immutable `NaverMapOverlayShape` carrying native ID, points or circle
-  center/radius, fill/stroke colors, width, z-index, visibility, and optional marker data.
-  Implement `toNaverMapOverlayShapes(MapContent)` without approximating circles. In
+  center/radius, fill/stroke colors, width, z-index, visibility, and marker title/snippet data.
+  Implement a testable converter that accepts the four separate model lists, emits them in the
+  documented marker/polyline/polygon/circle order, and a production overload that reads those
+  lists from `MapContent`. Convert markers as well as shapes; do not approximate circles. In
   `NaverMapHostTeardown.kt`, use the Kakao pattern: attempt cleanup, engine/view finish, and
   reference clearing independently; preserve the first throwable and add subsequent throwables
   as suppressed.
 
-- [ ] **Step 8: Run common tests and commit the common slice**
+- [ ] **Step 8: Add temporary platform actual scaffolding required by the KMP compiler**
+
+  Add minimal `NaverMapPlatform.android.kt` and `NaverMapPlatform.ios.kt` actual declarations
+  with the exact common signature. They may throw a clearly named internal
+  `NaverMapException("Naver Maps platform surface is not implemented.")` when called, but must
+  not import vendor SDK types; Task 4 and Task 6 replace them with the tested platform surfaces.
+  The common configuration tests must not call `Content`, so this scaffold is only a compilation
+  boundary and is removed/replaced before the provider leaf is considered implemented.
+
+- [ ] **Step 9: Run common tests and commit the common slice**
 
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
-  ./gradlew :weft-map:navermap:testAndroidHostTest
-  git add weft-map/navermap/src/commonMain weft-map/navermap/src/commonTest
+  ./gradlew :weft-map:navermap:testAndroidHostTest && \
+  git add weft-map/navermap/src/commonMain weft-map/navermap/src/commonTest \
+    weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.android.kt \
+    weft-map/navermap/src/iosMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.ios.kt && \
   git commit -m "feat: add Naver map provider contract"
   ```
 
