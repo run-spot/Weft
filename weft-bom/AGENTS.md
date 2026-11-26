@@ -2,7 +2,7 @@
 
 ## Role
 
-`:weft-bom` publishes the `run.thespot.weft:weft-bom` Java Platform. It aligns the versions of the `weft-core`, `weft-map`, `weft-login`, and `weft-push` artifacts.
+`:weft-bom` publishes the `run.thespot.weft:weft-bom` Java Platform. It aligns the versions of the `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push` artifacts. The `weft-kakaomap` coordinates are configured by `:weft-map:kakaomap`; `:weft-map` is only a namespace project.
 
 ## Milestones
 

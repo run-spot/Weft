@@ -6,7 +6,7 @@ plugins {
 dependencies {
     constraints {
         api(project(":weft-core"))
-        api(project(":weft-map"))
+        api(project(":weft-map:kakaomap"))
         api(project(":weft-login"))
         api(project(":weft-push"))
     }

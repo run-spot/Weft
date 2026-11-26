@@ -41,6 +41,7 @@ GROOVY_DEPENDENCY_RE = re.compile(
 ADD_DEPENDENCY_RE = re.compile(r"\b(dependencies\s*\.\s*)?add(?:Provider|AllLater|All)?\s*\(")
 COORDINATE_RE = re.compile(r"(?P<group>[A-Za-z0-9_.-]+):(?P<artifact>[A-Za-z0-9_.-]+)")
 REPOSITORY_TEXT_SUFFIXES = {".md", ".json", ".yml", ".yaml", ".py", ".sh"}
+GENERATED_PATH_PARTS = {".git", ".gradle", "build", "checkouts"}
 REQUIRED_SKILL_RULES = {
     "weft-architect": (
         "dependency-policy.md",
@@ -303,17 +304,26 @@ def verify_toolkit(profiles: dict[str, dict[str, Any]]) -> list[str]:
 def verify_repository_language() -> list[str]:
     errors: list[str] = []
     for path in ROOT.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or path.suffix.lower() not in REPOSITORY_TEXT_SUFFIXES:
+        if not path.is_file() or is_generated_path(path) or path.suffix.lower() not in REPOSITORY_TEXT_SUFFIXES:
             continue
         if HANGUL_RE.search(path.read_text(encoding="utf-8")):
             errors.append(f"repository text must be English: {path.relative_to(ROOT)}")
     return errors
 
 
+def is_generated_path(path: Path) -> bool:
+    """Exclude build outputs and external checkouts from repository source checks."""
+    try:
+        relative_path = path.relative_to(ROOT)
+    except ValueError:
+        return False
+    return any(part in GENERATED_PATH_PARTS for part in relative_path.parts)
+
+
 def verify_relative_markdown_links() -> list[str]:
     errors: list[str] = []
     for markdown_file in ROOT.rglob("*.md"):
-        if ".git" in markdown_file.parts:
+        if is_generated_path(markdown_file):
             continue
         source = markdown_file.read_text(encoding="utf-8")
         for raw_link in MARKDOWN_LINK_RE.findall(source):

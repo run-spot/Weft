@@ -7,10 +7,12 @@ plugins {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            // `LocalWeft` and `WeftApp` are public API that exposes a Compose composition local, so
-            // consumers receive the Compose runtime through this module. Only the runtime is added:
-            // no Material, UI, or foundation dependency belongs in the capability contract module.
+            // `LocalWeft`, `WeftApp`, and the provider-neutral map contract expose Compose
+            // runtime, UI, and foundation types, so consumers receive those public dependencies
+            // through this module. Vendor SDKs and platform framework types stay out of commonMain.
             api(libs.compose.runtime)
+            api(libs.compose.ui)
+            api(libs.compose.foundation)
         }
     }
 }

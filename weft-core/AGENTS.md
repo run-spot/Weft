@@ -17,14 +17,15 @@ val weft = Weft {
 val map = weft.get<MapPlugin>()
 ~~~
 
-The module contains no vendor SDK, platform adapter, or capability API of its own. It must stay free of Android and Apple framework types so that capability modules on `commonMain` can depend on it.
+The module contains no vendor SDK, platform adapter, or provider-specific implementation. It owns the shared installation contract and provider-neutral map contract, and must stay free of Android and Apple framework types so that capability modules on `commonMain` can depend on it.
 
 Two pieces of the contract reach beyond installation:
 
 - **`LocalWeft` and `WeftApp`** give composables the runtime without threading a parameter through
-  every screen. `weft-core` therefore depends on the Compose runtime (and only the runtime: no
-  Material, UI, or foundation), and applies the Compose compiler through the `weft.compose`
-  convention.
+  every screen. The provider-neutral map contract also exposes Compose UI and foundation types,
+  so `weft-core` publishes the Compose runtime, UI, and foundation dependencies and applies the
+  Compose compiler through the `weft.compose` convention. It keeps Material, vendor SDK, and
+  platform framework types out of `commonMain`.
 - **`WeftHealthCheck` and `WeftPlugin.healthCheck`** let each capability library describe the HTTP
   probe that proves its configured credential works. `Weft.healthChecks()` only collects the
   descriptions; running them belongs to `:weft-gradle-plugin` (`verifyWeftHealth`) or an admin tool.
@@ -42,7 +43,9 @@ Two pieces of the contract reach beyond installation:
 - The plugin type is the storage slot and is compared by `KClass`. Declare the shared capability interface, never a concrete provider class, unless that provider is meant to be a separate capability; consumers then resolve it with `weft.get<MapPlugin>()` and `weft.getOrNull<MapPlugin>()`.
 - Keep `Context`, `Activity`, `UIViewController`, and vendor SDK types out of `commonMain`. A plugin that needs a platform type keeps it in its own platform source set or behind an injected boundary.
 - Keep `prepare` side-effect free apart from building the configured instance. Bind into the runtime in `install`, which receives the completed registry, and resolve peer plugins there rather than in a constructor.
-- Do not add dependencies to `commonMain` without a public API need. The Compose runtime is the one accepted exception, because `LocalWeft` exposes a `ProvidableCompositionLocal`; keep Material, UI, foundation, and vendor types out.
+- Do not add dependencies to `commonMain` without a public API need. Compose runtime, UI, and
+  foundation are accepted because the public `LocalWeft`/map contract exposes their types; keep
+  Material, vendor SDK, and platform framework types out.
 - Keep the module free of networking. A plugin describes its health check as data; running it is the build tool's or the app's decision.
 - A capability library declares its own health check next to the plugin that owns the credential, and returns an empty list when it has no remote credential.
 - Do not release the module before its consumer milestone is complete.
