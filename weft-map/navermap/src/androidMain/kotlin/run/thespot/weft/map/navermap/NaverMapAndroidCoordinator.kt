@@ -243,6 +243,9 @@ internal class NaverMapAndroidCoordinator(
             lastRenderedPolygons = polygons
             lastRenderedCircles = circles
             nativeStateMayBeOutOfSync = false
+            synchronized(errorLock) {
+                errorReported = false
+            }
         } catch (failure: Throwable) {
             nativeStateMayBeOutOfSync = true
             if (cameraUpdateAttempted) cameraMayBeOutOfSync = true

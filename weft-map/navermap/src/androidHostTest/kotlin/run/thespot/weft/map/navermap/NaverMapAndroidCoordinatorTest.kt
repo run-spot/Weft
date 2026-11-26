@@ -52,6 +52,7 @@ class NaverMapAndroidCoordinatorTest {
         val coordinator = coordinator(host)
 
         coordinator.onAttach()
+        assertTrue(host.lifecycleCalls.isEmpty())
         coordinator.onResume()
         coordinator.onResume()
 
@@ -189,6 +190,74 @@ class NaverMapAndroidCoordinatorTest {
     }
 
     @Test
+    fun reportsDistinctFailuresAfterSuccessfulRecovery() {
+        val host = FakeNaverMapAndroidHost()
+        val errors = mutableListOf<Throwable>()
+        val coordinator = coordinator(host)
+        coordinator.onAttach()
+        coordinator.onResume()
+        host.ready()
+
+        host.failNextCameraMutation = true
+        coordinator.update(state(zoom = 8f), emptyContent(), { errors += it })
+        assertEquals(1, errors.size)
+
+        coordinator.update(state(zoom = 8f), emptyContent(), { errors += it })
+        assertEquals(2, host.renders.size)
+
+        host.failNextCameraMutation = true
+        coordinator.update(state(zoom = 7f), emptyContent(), { errors += it })
+
+        assertEquals(2, errors.size)
+        assertIs<NaverMapException>(errors[1])
+    }
+
+    @Test
+    fun queuesNativeCallbackAndSuppressesItAfterFinish() {
+        val pendingMainCallbacks = mutableListOf<() -> Unit>()
+        val staleErrors = mutableListOf<Throwable>()
+        val staleHost = FakeNaverMapAndroidHost()
+        val staleCoordinator = coordinator(
+            host = staleHost,
+            onError = { staleErrors += it },
+            dispatchToMain = { pendingMainCallbacks += it },
+        )
+        staleCoordinator.onAttach()
+        staleCoordinator.onResume()
+
+        staleHost.fail(IllegalStateException("stale native failure"))
+
+        assertTrue(staleErrors.isEmpty())
+        assertEquals(1, pendingMainCallbacks.size)
+        staleCoordinator.onFinish()
+        pendingMainCallbacks.removeAt(0).invoke()
+        assertTrue(staleErrors.isEmpty())
+
+        val expectedThread = Thread.currentThread()
+        val liveErrors = mutableListOf<Throwable>()
+        var callbackThread: Thread? = null
+        val liveHost = FakeNaverMapAndroidHost()
+        val liveCoordinator = coordinator(
+            host = liveHost,
+            onError = {
+                liveErrors += it
+                callbackThread = Thread.currentThread()
+            },
+            dispatchToMain = { pendingMainCallbacks += it },
+        )
+        liveCoordinator.onAttach()
+        liveCoordinator.onResume()
+        liveHost.fail(IllegalStateException("live native failure"))
+
+        assertTrue(liveErrors.isEmpty())
+        assertEquals(1, pendingMainCallbacks.size)
+        pendingMainCallbacks.removeAt(0).invoke()
+
+        assertEquals(1, liveErrors.size)
+        assertEquals(expectedThread, callbackThread)
+    }
+
+    @Test
     fun cameraRollbackRestoresPreviousCamera() {
         val host = FakeNaverMapAndroidHost()
         val coordinator = coordinator(host, initialState = state(zoom = 10f))
@@ -226,13 +295,14 @@ class NaverMapAndroidCoordinatorTest {
         host: FakeNaverMapAndroidHost,
         initialState: WeftMapState = state(),
         onError: ((Throwable) -> Unit)? = null,
+        dispatchToMain: ((() -> Unit) -> Unit) = { it() },
     ): NaverMapAndroidCoordinator = NaverMapAndroidCoordinator(
         host = host,
         ncpKeyId = "test-ncp-key-id",
         initialState = initialState,
         initialContent = emptyContent(),
         onError = onError,
-        dispatchToMain = { it() },
+        dispatchToMain = dispatchToMain,
     )
 
     private fun content(vararg ids: String): MapContent =
