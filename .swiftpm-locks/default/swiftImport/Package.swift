@@ -14,14 +14,16 @@ let package = Package(
   ],
   dependencies: [
     .package(path: "subpackages/_weft-live"),
-    .package(path: "subpackages/_weft-map_kakaomap")
+    .package(path: "subpackages/_weft-map_kakaomap"),
+    .package(path: "subpackages/_weft-push")
   ],
   targets: [
     .target(
       name: "KotlinMultiplatformLinkedPackage",
       dependencies: [
         .product(name: "_weft-live", package: "_weft-live"),
-        .product(name: "_weft-map_kakaomap", package: "_weft-map_kakaomap")
+        .product(name: "_weft-map_kakaomap", package: "_weft-map_kakaomap"),
+        .product(name: "_weft-push", package: "_weft-push")
       ]
     )
   ]
