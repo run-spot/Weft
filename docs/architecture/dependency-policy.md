@@ -11,7 +11,7 @@ Application modules may directly depend on:
 - Ktor client artifacts (`io.ktor:ktor-client-*`) and the Kotlin serialization JSON adapter (`io.ktor:ktor-serialization-kotlinx-json`) for HTTP.
 - Ktorfit artifacts (`de.jensklingenberg.ktorfit:ktorfit-*`) for declarative HTTP APIs.
 
-Kotlin, coroutines, serialization runtime, Compose Multiplatform, and the AndroidX Compose, Activity, Lifecycle, SavedState, and Core foundation artifacts required by the selected profile are platform foundations. They are listed in [the machine-readable allowlist](../../harness/dependency-policy.json). Kotlin/Gradle plugins, Android SDKs, and Apple SDKs are toolchain or platform APIs, not application libraries.
+Kotlin, coroutines, serialization runtime, Compose Multiplatform, and the AndroidX Compose, Activity, Credentials, Lifecycle, SavedState, and Core foundation artifacts required by the selected profile are platform foundations. They are listed in [the machine-readable allowlist](../../harness/dependency-policy.json). Kotlin/Gradle plugins, Android SDKs, and Apple SDKs are toolchain or platform APIs, not application libraries.
 
 Do not add another direct library for dependency injection, navigation, storage, image loading, analytics, logging, date/time, or UI components. Use the approved libraries and platform APIs. If a capability is missing, record the gap and add it to Weft or Montage through an explicit policy change. Do not install a one-off dependency in an app to bypass the allowlist.
 
