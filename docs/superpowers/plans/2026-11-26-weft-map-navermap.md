@@ -218,26 +218,30 @@
 
 **Files:**
 - Create: `weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinatorTest.kt`
+- Create: `weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializerTest.kt`
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinator.kt`
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializer.kt`
-- Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidMapViewHost.kt`
 
 - [ ] **Step 1: Write failing coordinator tests around a fake host**
 
   Add tests named `startsAfterAttachAndResumeOnce`, `pauseBeforeStartDoesNotTouchHost`,
   `rendersLatestStateWhenMapBecomesReady`, `normalizesCameraToNativeBounds`,
-  `sameKeyInitializesOnceAndConflictingKeyReportsOnce`, `lateCallbacksAreIgnoredAfterFinish`,
-  and `reportsNativeFailureOnce`. Define a fake `NaverMapAndroidHost` in the test source with
+  `lateCallbacksAreIgnoredAfterFinish`, `reportsNativeFailureOnce`, and
+  `cameraRollbackFailureIsSuppressed`. Define a fake `NaverMapAndroidHost` in the test source with
   explicit lifecycle/render call logs, configurable zoom bounds, and controllable ready/error
   callbacks. Assert user pan is preserved when only content changes by passing a null camera to
-  the host render call.
+  the host render call. In `NaverMapAndroidSdkInitializerTest.kt`, add
+  `sameKeyInitializesOnce` and `conflictingKeyDoesNotReinitialize` using an injectable
+  `initializeSdk: (String) -> Unit` seam and `resetForTest`.
 
 - [ ] **Step 2: Run the host tests to observe the missing implementation failure**
 
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
-  ./gradlew :weft-map:navermap:testAndroidHostTest --tests '*NaverMapAndroidCoordinatorTest'
+  ./gradlew :weft-map:navermap:testAndroidHostTest \
+    --tests '*NaverMapAndroidCoordinatorTest' \
+    --tests '*NaverMapAndroidSdkInitializerTest'
   ```
 
   Expected: compilation fails because the host interface, coordinator, and SDK initializer are
@@ -251,14 +255,20 @@
   only when attached and resumed; dispatch native ready/error callbacks to the main thread;
   normalize bearing to `[0, 360)`, round/clamp zoom to host bounds, clamp tilt to the native
   range, and skip camera updates when only content changed. On a failed render, mark the native
-  state out of sync so the next render forces a full restore.
+  state out of sync so the next render forces a full restore. Keep the coordinator's committed
+  camera/content snapshot separate from the overlay reconciler's committed native-object snapshot;
+  the host owns native camera capture/restore and the coordinator owns generation/out-of-sync
+  recovery.
 
 - [ ] **Step 4: Implement the process-local SDK initializer**
 
-  In `NaverMapAndroidSdkInitializer.kt`, expose an internal `initialize(context, ncpKeyId,
-  initializeSdk)` function and `resetForTest`. Initialize `NaverMapSdk` only once for the first
-  key, accept repeated identical keys, and throw `NaverMapException` for a conflicting key
-  without invoking the native initializer. Never include the key value in the exception message.
+  In `NaverMapAndroidSdkInitializer.kt`, expose an internal `initialize(ncpKeyId,
+  initializeSdk: (String) -> Unit)` function and `resetForTest`. Initialize the native
+  `NaverMapSdk` from the Android host by passing a lambda that constructs its
+  `NcpKeyClient(context, ncpKeyId)`; the registry itself remains context-free and testable.
+  Initialize only once for the first key, accept repeated identical keys, and throw
+  `NaverMapException` for a conflicting key without invoking the native initializer. Never
+  include the key value in the exception message.
 
 - [ ] **Step 5: Run focused Android tests and commit the coordinator slice**
 
@@ -268,7 +278,8 @@
   ./gradlew :weft-map:navermap:testAndroidHostTest --tests '*NaverMapAndroidCoordinatorTest'
   git add weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinator.kt \
     weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializer.kt \
-    weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinatorTest.kt
+    weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinatorTest.kt \
+    weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidSdkInitializerTest.kt
   git commit -m "feat: add Naver Android map lifecycle coordinator"
   ```
 
@@ -279,25 +290,30 @@
 - Modify: `weft-map/navermap/src/androidHostTest/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidCoordinatorTest.kt`
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidOverlayReconciler.kt`
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidOverlayStyle.kt`
-- Modify: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidMapViewHost.kt`
+- Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapAndroidMapViewHost.kt`
 - Create: `weft-map/navermap/src/androidMain/kotlin/run/thespot/weft/map/navermap/NaverMapPlatform.android.kt`
 
 - [ ] **Step 1: Write failing reconciler and lifecycle-bridge tests**
 
-  Add fake native marker/shape layers and tests named `addsUpdatesAndRemovesByStableId`,
+  Add fake native marker/shape layers and a fake `NaverMapAndroidViewLifecycle` seam; tests named `addsUpdatesAndRemovesByStableId`,
   `keepsNativeIdentityForStyleAndVisibilityUpdates`, `rollsBackAfterMutationFailure`,
   `marksLayerUnsynchronizedWhenRollbackFails`, `forwardsSavedStateAndLowMemoryCallbacks`,
-  and `disposesLifecycleBridgesIdempotently`. Assert the reconciler stores committed snapshots,
-  restores on failure, and makes the next render a full restore after rollback failure. Assert
-  the Android surface calls `MapView.onCreate`, lifecycle methods, saved-state provider,
-  `onLowMemory`, and `onDestroy` exactly once in the correct order.
+  `restoresEmptyAndRestoredSavedStateBundles`, `unregistersSavedStateProvider`,
+  `disposesLifecycleBridgesIdempotently`, and `teardownRunsAllCleanupStepsAfterFailure`. Assert
+  the reconciler stores committed snapshots, restores on failure, and makes the next render a
+  full restore after rollback failure. Assert the fake lifecycle seam receives
+  `MapView.onCreate`, `onStart`, `onResume`, `onPause`, `onStop`, `onDestroy`, saved-state
+  registration/unregistration, and `onLowMemory` exactly once in the correct order without
+  constructing a real SDK view.
 
 - [ ] **Step 2: Run the tests and verify the expected missing-symbol failure**
 
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
-  ./gradlew :weft-map:navermap:testAndroidHostTest --tests '*NaverMapAndroidOverlayReconcilerTest'
+  ./gradlew :weft-map:navermap:testAndroidHostTest \
+    --tests '*NaverMapAndroidOverlayReconcilerTest' \
+    --tests '*NaverMapAndroidCoordinatorTest'
   ```
 
   Expected: compilation fails because the reconciler, style converter, and Android surface are
@@ -319,20 +335,32 @@
 
   Use `roundToInt()` for common z-index values, preserve alpha in `Color.toArgb()`, and multiply
   Android stroke widths by display density. Detach removed overlays by setting their map to null.
-  Keep native object identity for updates where the SDK allows property mutation.
+  Keep native object identity for updates where the SDK allows property mutation. Reconciliation
+  rollback restores the previous marker/shape snapshot; the host render transaction also captures
+  the native `NaverMap.cameraPosition` before `moveCamera` and restores it through a second
+  `moveCamera` on failure, attaching marker/shape/camera rollback failures as suppressed
+  exceptions. Add fake-host assertions for both successful camera rollback and camera rollback
+  failure.
 
 - [ ] **Step 4: Implement `MapView` host and Compose surface**
 
-  In `NaverMapAndroidMapViewHost.kt`, create `MapView`, call `onCreate` once with the saved
-  `Bundle`, initialize the SDK, register `getMapAsync`, and implement the host interface. Keep
-  the `NaverMap` native object only after `onMapReady`; derive current zoom bounds from the map.
-  Use `runNaverMapHostTeardown` during finish.
+  In `NaverMapAndroidMapViewHost.kt`, create `MapView`, call `onCreate` once with the restored or
+  empty `Bundle`, initialize the SDK, register `getMapAsync`, and implement the host interface.
+  Map `LatLng` to `com.naver.maps.geometry.LatLng`, construct the native `CameraPosition`, and
+  call `moveCamera(CameraUpdate.toCameraPosition(...))`; derive current zoom/tilt bounds from the
+  map and normalize bearing before the move. Keep the `NaverMap` native object only after
+  `onMapReady`. Capture the prior native camera for rollback and use `runNaverMapHostTeardown`
+  during finish.
 
   In `NaverMapPlatform.android.kt`, use `LocalLifecycleOwner`, `AndroidView`, and `DisposableEffect`.
-  Forward attach/detach and resumed/paused state to the coordinator. Register a
-  `SavedStateRegistry.SavedStateProvider` that calls `MapView.onSaveInstanceState`, and register
-  a `ComponentCallbacks2` for `onLowMemory`; unregister both on disposal. Forward lifecycle
-  events to `onStart`, `onResume`, `onPause`, `onStop`, and `onDestroy`. Do not use a Fragment or
+  Define the fakeable `NaverMapAndroidViewLifecycle`/saved-state bridge in this platform file so
+  tests can drive callbacks without a real view. Obtain `SavedStateRegistryOwner` from the
+  attached view tree with `ViewTreeSavedStateRegistryOwner.get(mapView)`, consume a restored
+  bundle before `onCreate`, register a stable key with `registerSavedStateProvider`, and remove
+  it with `unregisterSavedStateProvider` during disposal. If the owner is not available until
+  attach, defer registration while using an empty bundle for initial creation. Register a
+  `ComponentCallbacks2` for `onLowMemory`; unregister both bridges on disposal. Forward attach/
+  detach and all five lifecycle callbacks to the host/coordinator. Do not use a Fragment or
   expose Android classes through the common expect declaration.
 
 - [ ] **Step 5: Run Android provider tests and commit**
@@ -340,7 +368,7 @@
   ```sh
   ANDROID_HOME="$HOME/Library/Android/sdk" \
   ANDROID_SDK_ROOT="$HOME/Library/Android/sdk" \
-  ./gradlew :weft-map:navermap:testAndroidHostTest
+  ./gradlew :weft-map:navermap:testAndroidHostTest :weft-map:navermap:check
   git add weft-map/navermap/src/androidMain weft-map/navermap/src/androidHostTest
   git commit -m "feat: implement Naver Android map adapter"
   ```
