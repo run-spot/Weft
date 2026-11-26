@@ -27,6 +27,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -215,6 +216,7 @@ class NaverMapAndroidCoordinatorTest {
     @Test
     fun queuesNativeCallbackAndSuppressesItAfterFinish() {
         val pendingMainCallbacks = mutableListOf<() -> Unit>()
+        val expectedThread = Thread.currentThread()
         val staleErrors = mutableListOf<Throwable>()
         val staleHost = FakeNaverMapAndroidHost()
         val staleCoordinator = coordinator(
@@ -225,15 +227,17 @@ class NaverMapAndroidCoordinatorTest {
         staleCoordinator.onAttach()
         staleCoordinator.onResume()
 
-        staleHost.fail(IllegalStateException("stale native failure"))
+        val staleWorker = Thread { staleHost.fail(IllegalStateException("stale native failure")) }
+        staleWorker.start()
+        staleWorker.join()
 
+        assertNotEquals(expectedThread, staleHost.lastErrorInvocationThread)
         assertTrue(staleErrors.isEmpty())
         assertEquals(1, pendingMainCallbacks.size)
         staleCoordinator.onFinish()
         pendingMainCallbacks.removeAt(0).invoke()
         assertTrue(staleErrors.isEmpty())
 
-        val expectedThread = Thread.currentThread()
         val liveErrors = mutableListOf<Throwable>()
         var callbackThread: Thread? = null
         val liveHost = FakeNaverMapAndroidHost()
@@ -247,14 +251,44 @@ class NaverMapAndroidCoordinatorTest {
         )
         liveCoordinator.onAttach()
         liveCoordinator.onResume()
-        liveHost.fail(IllegalStateException("live native failure"))
+        val liveWorker = Thread { liveHost.fail(IllegalStateException("live native failure")) }
+        liveWorker.start()
+        liveWorker.join()
 
+        assertNotEquals(expectedThread, liveHost.lastErrorInvocationThread)
         assertTrue(liveErrors.isEmpty())
         assertEquals(1, pendingMainCallbacks.size)
         pendingMainCallbacks.removeAt(0).invoke()
 
         assertEquals(1, liveErrors.size)
         assertEquals(expectedThread, callbackThread)
+    }
+
+    @Test
+    fun queuesReadyCallbackFromWorkerUntilMainDispatcherDrains() {
+        val pendingMainCallbacks = mutableListOf<() -> Unit>()
+        val expectedThread = Thread.currentThread()
+        val host = FakeNaverMapAndroidHost()
+        val coordinator = coordinator(
+            host = host,
+            dispatchToMain = { pendingMainCallbacks += it },
+        )
+        coordinator.onAttach()
+        coordinator.onResume()
+
+        val worker = Thread { host.ready() }
+        worker.start()
+        worker.join()
+
+        assertNotEquals(expectedThread, host.lastReadyInvocationThread)
+        assertEquals(NaverMapAndroidCoordinatorState.Started, coordinator.state)
+        assertTrue(host.renders.isEmpty())
+        assertEquals(1, pendingMainCallbacks.size)
+
+        pendingMainCallbacks.removeAt(0).invoke()
+
+        assertEquals(NaverMapAndroidCoordinatorState.Ready, coordinator.state)
+        assertEquals(1, host.renders.size)
     }
 
     @Test
@@ -322,6 +356,10 @@ private class FakeNaverMapAndroidHost(
 
     private var onReady: ((NaverMapCameraBounds) -> Unit)? = null
     private var onError: ((Throwable) -> Unit)? = null
+    var lastReadyInvocationThread: Thread? = null
+        private set
+    var lastErrorInvocationThread: Thread? = null
+        private set
 
     override fun start(
         ncpKeyId: String,
@@ -372,10 +410,12 @@ private class FakeNaverMapAndroidHost(
     }
 
     fun ready() {
+        lastReadyInvocationThread = Thread.currentThread()
         onReady?.invoke(bounds)
     }
 
     fun fail(failure: Throwable) {
+        lastErrorInvocationThread = Thread.currentThread()
         onError?.invoke(failure)
     }
 }
