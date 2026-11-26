@@ -12,8 +12,10 @@
 - [Apple SDK bridges and distribution](architecture/apple-interop.md)
 - [KMP bridge library contract](architecture/bridge-library.md)
 - [Bridge library modules](architecture/library-modules.md)
+- [Push notifications](architecture/push-notifications.md)
 - [Maven Central publishing](architecture/maven-central-publishing.md)
 - [Backend choices and PKCE setup](architecture/backend.md)
+- [Supabase login with Weft](architecture/login.md)
 - [Application dependency policy](architecture/dependency-policy.md)
 - [Toolchain version policy](architecture/toolchain-policy.md)
 

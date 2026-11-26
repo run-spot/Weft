@@ -9,17 +9,17 @@ The bridge-library workspace is a multi-project Gradle build inside the Weft rep
 | `:weft-core` | `weft-core` | Plugin container, map models, Compose `WeftMap` and content tree | M1: plugin and map contracts |
 | `:weft-map` | none | Namespace parent for provider leaves | No tasks or publication |
 | `:weft-map:kakaomap` | `weft-kakaomap` | Kakao Maps provider binding and Android/iOS adapters | M1: implemented; local fixture passes, CI/remote consumer pending |
-| `:weft-login` | `weft-login` | Cross-platform sign-in capability | M0: build and publication skeleton |
-| `:weft-push` | `weft-push` | Push registration and notification capability | M0: build and publication skeleton |
+| `:weft-login` | `weft-login` | Supabase OAuth PKCE, Android/iOS session storage, and Android Restore Credentials | M1/M2: implementation compiled; provider and device validation pending |
+| `:weft-push` | `weft-push` | FID-based registration, common message processing, and OS notification presentation backed by Firebase Cloud Messaging | M2: Android presenter and iOS app/extension processor bridge |
 | `:weft-live` | `weft-live` | Finite live-activity lifecycle with Android notifications and an ActivityKit/WidgetKit façade | M1: candidate implemented; external Apple consumer and remote SwiftPM source pending |
 | `:weft-bom` | `weft-bom` | Maven BOM aligning the default four KMP artifacts; optionally includes `weft-live` | M0: build and publication skeleton |
 | `:weft-gradle-plugin` | not published | Gradle plugin with the offline wiring check and the aggregated health check | M1: plugin and health verification |
 
-Published artifacts use group `run.thespot.weft` and shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. Login and push remain scaffolding; the Kakao provider is implemented but is not a release candidate until CI and a separately published consumer validate its Android/iOS path. `:weft-live` is always included in root verification, but its BOM constraint and coordinated publication remain behind `weftLiveReleaseEnabled=false` until the versioned remote SwiftPM and external consumer gates pass.
+Published artifacts use group `run.thespot.weft` and shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. Login implements the Supabase path; its project and device validation remain before release, and a generic OIDC adapter for Spring-backed profiles remains future work. Push has its public API and first Firebase adapters, but is not a release candidate until CI and a separate Android/iOS consumer validate both platform paths. The Kakao provider also remains short of release readiness until CI and a separately published consumer validate its Android/iOS path. `:weft-live` is always included in root verification, but its BOM constraint and coordinated publication remain behind `weftLiveReleaseEnabled=false` until the versioned remote SwiftPM and external consumer gates pass.
 
 ## Login capability roadmap
 
-The `:weft-login` contract will use OAuth 2.0 Authorization Code with PKCE for native sign-in. It must support the Supabase Auth exchange and a PKCE-capable OIDC issuer for Spring-backed profiles, while keeping app modules on the approved Weft/Ktor/Ktorfit allowlist. M1 defines provider-neutral results and configuration; M2 implements system-browser callbacks, verifier/session storage, and the provider adapters; M3 verifies both provider paths in a separate consumer. PKCE is a Weft sign-in policy and does not inherently require an application backend.
+The first `:weft-login` implementation targets Supabase Auth: OAuth 2.0 Authorization Code with PKCE, Keychain/Keystore session storage, and Android Restore Credentials through Supabase's experimental passkey endpoints. A PKCE-capable generic OIDC adapter remains future work for Spring-backed profiles. Keep provider transport inside the Weft artifact and app modules on the approved Weft/Ktor/Ktorfit allowlist. PKCE is a Weft sign-in policy and does not inherently require an application backend. See the [Supabase login guide](login.md) for setup and current release limitations.
 
 ## Plugin installation model
 
@@ -39,16 +39,29 @@ class AppWeftModule {
 class AppKoinApplication
 
 startKoin<AppKoinApplication> {
-    properties(mapOf("weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey))
+    properties(
+        mapOf(
+            "weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey,
+            "weft.login.supabaseUrl" to supabaseUrl,
+            "weft.login.publishableKey" to supabasePublishableKey,
+            "weft.login.redirectUri" to loginRedirectUri,
+        ),
+    )
 }
 val weft = KoinPlatform.getKoin().get<Weft>()
 ~~~
 
-The Kakao leaf publishes a Koin `@Configuration` module and a `@Single` contribution. Koin's
-Compiler Plugin discovers configured modules from the app classpath; the contribution reads its
-native app key from `weft.kakaoMap.nativeAppKey` and performs the same `WeftConfig.install` call
-that a direct consumer would write. Other capability leaves follow the same pattern. A consumer
-that does not start Koin can continue to build a runtime with `Weft { install(...) }`.
+Each implemented capability leaf publishes a Koin `@Configuration` module and a `@Single`
+contribution. Koin's Compiler Plugin discovers configured modules from the app classpath, and the
+app injects every `WeftContribution` into one factory. Kakao Maps reads its native app key from
+`weft.kakaoMap.nativeAppKey`; Supabase login reads `weft.login.supabaseUrl`,
+`weft.login.publishableKey`, and `weft.login.redirectUri`. These are public client settings; never
+put a Supabase secret or service-role key in Koin properties. Firebase push uses
+`DefaultPushMessageProcessor`, or receives an app-provided `PushMessageProcessor` definition.
+`weft-live` contributes when the optional artifact is present, but the app must provide a
+platform-specific `LiveActivityPlatform` definition. Each contribution performs the same
+`WeftConfig.install` call that a direct consumer would write. A consumer that does not start Koin
+can continue to build a runtime with `Weft { install(...) }`.
 
 The provider-side contribution stays with its implementation:
 
@@ -144,6 +157,8 @@ Each module uses the standard KMP source-set boundaries:
 ~~~
 
 Only create a source-set implementation when a module milestone needs it. Keep Android and Apple SDK dependencies in their platform source sets. The `:weft-map` parent is only a namespace; `:weft-map:kakaomap` is the published leaf. The BOM is metadata-only and constrains `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push` to the shared release version; it does not add runtime dependencies. When the explicit release gate is enabled, it also constrains `weft-live`. `:weft-core` owns the provider-neutral map contract.
+
+`:weft-push` owns the provider-neutral registration ID, message-processing contract, notification request, presenter API, and permission status. The sending backend constructs the FCM data payload; Android and iOS adapters present common processor results. Its FCM setup and OS lifecycle boundaries are described in [Push notifications](push-notifications.md).
 
 ## Platform targets
 

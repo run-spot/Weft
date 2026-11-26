@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login and push remain build/publication scaffolding. These libraries are not yet published.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login now includes Supabase Auth PKCE and Android Restore Credentials; push includes Firebase registration and Android/iOS notification presentation. Separate consumer and device validation remain release gates for those modules. These libraries are not yet published.
 
 ## Start here
 
@@ -74,12 +74,19 @@ class AppWeftModule {
 class AppKoinApplication
 
 startKoin<AppKoinApplication> {
-    properties(mapOf("weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey))
+    properties(
+        mapOf(
+            "weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey,
+            "weft.login.supabaseUrl" to supabaseUrl,
+            "weft.login.publishableKey" to supabasePublishableKey,
+            "weft.login.redirectUri" to loginRedirectUri,
+        ),
+    )
 }
 val weft = KoinPlatform.getKoin().get<Weft>()
 ~~~
 
-The Koin Compiler Plugin discovers configured modules on the application classpath. The Kakao provider contributes its own `KakaoMap` install and reads the native app key from the named Koin property. A consumer that does not use Koin can continue using the direct `Weft` DSL:
+The Koin Compiler Plugin discovers configured modules on the application classpath. Kakao Maps and Supabase login contribute their own installs and read public configuration from Koin properties. Firebase push contributes its default message policy; an app can provide a `PushMessageProcessor` definition to customize it. `weft-live` also contributes its plugin when included, and requires the app to provide a platform-specific `LiveActivityPlatform`. A consumer that does not use Koin can continue using the direct `Weft` DSL:
 
 ~~~kotlin
 val weft = Weft {
