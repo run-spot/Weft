@@ -150,7 +150,22 @@ dependencies {
 }
 ~~~
 
-The Kakao Android SDK is resolved from Kakao's Maven repository. Add it to the consumer's dependency repositories alongside Google and Maven Central:
+Configure the repository for the selected provider alongside Google and Maven Central. Kakao uses its release repository (shown below); Naver uses the official Naver Maven repository and `weft-navermap` leaf:
+
+~~~kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://repository.map.naver.com/archive/maven")
+    }
+}
+
+dependencies {
+    implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
+    implementation("run.thespot.weft:weft-navermap")
+}
+~~~
 
 ~~~kotlin
 dependencyResolutionManagement {
