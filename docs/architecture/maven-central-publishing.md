@@ -1,6 +1,6 @@
 # Maven Central Publishing
 
-This repository prepares six default Kotlin Multiplatform Maven Central publications, one verified live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
+This repository prepares six default Kotlin Multiplatform Maven Central publications, one verified live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication, and version `0.1.0` is published on Maven Central; the tag-driven workflow below publishes every later release.
 
 ## Build configuration
 
@@ -10,7 +10,7 @@ This repository prepares six default Kotlin Multiplatform Maven Central publicat
 - `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the default six KMP artifacts to the same release version. It includes `weft-live` only when `weftLiveReleaseEnabled=true` is explicitly enabled.
 - The Naver leaf resolves `com.naver.maps:map-sdk:3.24.1` from `https://repository.map.naver.com/archive/maven`; its iOS SwiftPM dependency is `NMapsMap` 3.24.1 and its KMP framework is dynamic.
 - POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
-- `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
+- `publishToMavenCentral(automaticRelease = true)` releases each validated deployment to Maven Central without a manual Publish step in Central Portal. The release workflow below is the only intended caller of the coordinated publication task.
 
 The build uses the Vanniktech Maven Publish Gradle plugin, which is a community plugin and is also used by Kotlin's current Multiplatform Maven Central tutorial. Sonatype does not provide an official Gradle publishing plugin.
 
@@ -79,9 +79,9 @@ dependencies {
 
 ## Release workflow
 
-The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-sensor:gps`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
+The libraries and BOM share a version and are published together by `.github/workflows/publish.yml`, which runs on a version tag push instead of a GitHub release. Push a tag such as `0.1.1` or `weft-v0.1.1`: both patterns trigger the workflow, which removes the optional `weft-v` prefix, rejects a tag that is not `MAJOR.MINOR.PATCH`, overrides `VERSION_NAME`, and publishes `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-sensor:gps`, `:weft-login`, `:weft-push`, and `:weft-bom` through `publishWeftReleaseToMavenCentral --no-configuration-cache`. Because the convention enables automatic release, the single Central Portal deployment is validated and published without any manual step, and the job waits for the deployment to reach `PUBLISHED`.
 
-The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
+The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication, so a version can be published only once and a failed release needs a new tag.
 
 The root `verify` task always checks `:weft-live` and its four target POMs. With the default
 `weftLiveReleaseEnabled=false`, the BOM and coordinated publish task omit it, and any direct live
