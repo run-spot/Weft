@@ -18,6 +18,8 @@ import platform.CoreLocation.kCLAuthorizationStatusNotDetermined
 import platform.CoreLocation.kCLLocationAccuracyBest
 import platform.darwin.NSObject
 
+private const val UNIX_EPOCH_TO_APPLE_REFERENCE_DATE_SECONDS = 978_307_200.0
+
 internal actual fun createGpsPlugin(distanceFilterMeters: Double): GpsPlugin =
     IosGpsPlugin(distanceFilterMeters)
 
@@ -107,6 +109,9 @@ private fun CLAuthorizationStatus.isGpsAuthorized(): Boolean =
 
 private fun CLLocation.toGpsLocation(): GpsLocation {
     val coordinate = coordinate.useContents { latitude to longitude }
+    val timestampSinceUnixEpoch = timestamp.timeIntervalSinceReferenceDate +
+        UNIX_EPOCH_TO_APPLE_REFERENCE_DATE_SECONDS
+    val timestampMillis = (timestampSinceUnixEpoch * 1_000.0).toLong().coerceAtLeast(0L)
     return GpsLocation(
         latitude = coordinate.first,
         longitude = coordinate.second,
@@ -115,6 +120,6 @@ private fun CLLocation.toGpsLocation(): GpsLocation {
         verticalAccuracyMeters = verticalAccuracy.takeIf { it >= 0.0 },
         speedMetersPerSecond = speed.takeIf { it >= 0.0 },
         bearingDegrees = course.takeIf { it >= 0.0 }?.let { ((it % 360.0) + 360.0) % 360.0 },
-        timestampMillis = (timestamp.timeIntervalSince1970 * 1_000.0).toLong().coerceAtLeast(0L),
+        timestampMillis = timestampMillis,
     )
 }
