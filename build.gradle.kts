@@ -217,16 +217,16 @@ gradle.taskGraph.whenReady {
     }
     if (":publishWeftReleaseToMavenCentral" in taskPaths) {
         check(":weft-map:publishToMavenCentral" !in taskPaths) {
-            "Release staging must not publish the :weft-map namespace project."
+            "Release publication must not publish the :weft-map namespace project."
         }
         check(":weft-map:kakaomap:publishToMavenCentral" in taskPaths) {
-            "Release staging must publish the :weft-map:kakaomap leaf."
+            "Release publication must publish the :weft-map:kakaomap leaf."
         }
         check(":weft-map:navermap:publishToMavenCentral" in taskPaths) {
-            "Release staging must publish the :weft-map:navermap leaf."
+            "Release publication must publish the :weft-map:navermap leaf."
         }
         check(":weft-sensor:gps:publishToMavenCentral" in taskPaths) {
-            "Release staging must publish the :weft-sensor:gps leaf."
+            "Release publication must publish the :weft-sensor:gps leaf."
         }
         check((":weft-live:publishToMavenCentral" in taskPaths) == weftLiveReleaseEnabled.get()) {
             "Coordinated live publication must match weftLiveReleaseEnabled."
@@ -236,6 +236,6 @@ gradle.taskGraph.whenReady {
 
 tasks.register("publishWeftReleaseToMavenCentral") {
     group = "publishing"
-    description = "Stages the Weft libraries and BOM together for a coordinated release."
+    description = "Publishes the Weft libraries and BOM together in one automatic Maven Central release."
     dependsOn(weftReleasePublishTasks)
 }
