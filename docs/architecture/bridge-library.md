@@ -1,6 +1,6 @@
 # KMP bridge library contract
 
-This document defines the public boundary and distribution requirements for Weft's Android/iOS native SDK bridge libraries. The first provider pilot is Kakao Maps, with a provider-neutral map API in `:weft-core` and a nested leaf at `:weft-map:kakaomap`.
+This document defines the public boundary and distribution requirements for Weft's Android/iOS native SDK bridge libraries. Kakao Maps and Naver Maps are provider leaves over the provider-neutral map API in `:weft-core`, nested at `:weft-map:kakaomap` and `:weft-map:navermap`. Applications select exactly one map provider per `Weft` runtime.
 
 ## Goals
 
@@ -41,17 +41,17 @@ Connect the common API with expect/actual or an injected platform provider when 
 
 ### Maven Central
 
-Publish each capability/provider leaf as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The group is `run.thespot.weft`, with default artifact IDs `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`; `:weft-map` is a Gradle namespace, not a publication. The `weft-bom` artifact aligns those four artifacts, and releases are coordinated. `:weft-live` is a verified candidate whose BOM constraint and publication are enabled only by the explicit `weftLiveReleaseEnabled` gate after its external Apple consumer path is proven. `weft-core` carries the plugin installation and provider-neutral map contracts; it contains no vendor or platform types. The Kakao Android SDK is a runtime dependency of `weft-kakaomap`, so Android consumers must configure Kakao's Maven repository. Verify the `run.thespot` namespace in Central Portal before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
+Publish each capability/provider leaf as a separate KMP Gradle artifact for Android and KMP Gradle consumers. The group is `run.thespot.weft`, with default artifact IDs `weft-core`, `weft-kakaomap`, `weft-navermap`, `weft-login`, and `weft-push`; `:weft-map` is a Gradle namespace, not a publication. The `weft-bom` artifact aligns those five artifacts, and releases are coordinated. `:weft-live` remains a verified candidate whose BOM constraint and publication are enabled only by the explicit `weftLiveReleaseEnabled` gate after its external Apple consumer path is proven. `weft-core` carries the plugin installation and provider-neutral map contracts; it contains no vendor or platform types. The Kakao Android SDK is a runtime dependency of `weft-kakaomap`, so Android consumers must configure Kakao's Maven repository. The Naver Android SDK (`com.naver.maps:map-sdk:3.24.1`) is a runtime dependency of `weft-navermap`, so Naver consumers must configure `https://repository.map.naver.com/archive/maven`. Verify both provider POMs, the `run.thespot` namespace, and separate Android/iOS consumers before the first release. The repository is licensed under Apache-2.0; confirm any SDK dependency's redistribution terms before including or bundling it.
 
 The build conventions, module coordinates, metadata, signing hooks, and staged release workflow are described in [Bridge library modules](library-modules.md) and [Maven Central publishing](maven-central-publishing.md). Nothing has been published yet.
 
 ### SwiftPM/Xcode
 
-Use SwiftPM inside the KMP bridge build to import Objective-C/Clang-visible SDK APIs. The Kakao pilot imports KakaoMapsSDK-SPM 2.12.19 and publishes a Kotlin KMP adapter as `run.thespot.weft:weft-kakaomap`. The local framework and Xcode consumer fixture build with iOS 13.0 and include the vendor resource bundle. The pilot does not bundle the Swift package into Maven or replace SwiftPM resolution needed to build and link the iOS target.
+Use SwiftPM inside the KMP bridge build to import Objective-C/Clang-visible SDK APIs. The Kakao pilot imports KakaoMapsSDK-SPM 2.12.19 and publishes a Kotlin KMP adapter as `run.thespot.weft:weft-kakaomap`. The Naver leaf imports `NMapsMap` 3.24.1 from `https://github.com/navermaps/SPM-NMapsMap.git` and publishes `run.thespot.weft:weft-navermap` with a dynamic `WeftNaverMap` framework for iOS 13.0. The Naver Android Maven dependency and iOS SwiftPM package are platform-scoped; neither is exposed from `commonMain`. The local framework and Xcode consumer gate must link the generated dynamic framework with the official dynamic NMapsMap XCFramework before release. These providers do not bundle their Swift packages into Maven or replace SwiftPM resolution needed to build and link the iOS target.
 
 If native Swift consumers need the Kotlin framework directly, that is a separate XCFramework/SwiftPM binary distribution with its own public artifact URL, version tag, checksum, supported Apple architectures, and minimum deployment target.
 
-Kotlin labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. The observed local Kakao pilot on KGP 2.4.21 is not official support: runtime simulator tests on this Intel host and a remote Maven consumer remain unvalidated. Direct Swift consumers would need a separately published XCFramework with a versioned Package.swift, checksum, supported Apple architectures, and minimum deployment target.
+Kotlin labels SwiftPM import into KMP modules as Alpha and warns that exporting such a module itself as a Swift package may not work. The observed local Kakao pilot on KGP 2.4.21 is not official support: runtime simulator tests on this Intel host and a remote Maven consumer remain unvalidated. The Naver dynamic framework must additionally pass the separate iOS SwiftPM/Xcode consumer gate described above. Direct Swift consumers would need a separately published XCFramework with a versioned Package.swift, checksum, supported Apple architectures, and minimum deployment target.
 
 ### Live activity capability
 
@@ -75,6 +75,8 @@ is not a release-ready transitive Maven dependency.
 - Success, cancellation, error, permission-denied, and missing-capability paths are checked.
 - Android host checks and iOS device/simulator framework builds verify the adapters; Apple Silicon CI must run simulator runtime tests.
 - A separate Gradle consumer resolves the local Maven publication.
+- Separate Android consumers resolve both provider publications with their vendor repositories; the Naver consumer resolves `com.naver.maps:map-sdk:3.24.1` from Naver's Maven repository.
+- The Naver iOS consumer links the dynamic `WeftNaverMap` framework and official dynamic `NMapsMap` XCFramework on the supported iOS 13.0 targets.
 - If direct Swift consumption is promised, a separate SwiftPM consumer sample resolves the XCFramework and completes an archive build.
 - Supported version tuples, iOS deployment target, Android minSdk, and API stability policy are documented.
 

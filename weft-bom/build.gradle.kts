@@ -11,6 +11,7 @@ dependencies {
     constraints {
         api(project(":weft-core"))
         api(project(":weft-map:kakaomap"))
+        api(project(":weft-map:navermap"))
         api(project(":weft-login"))
         api(project(":weft-push"))
         if (weftLiveReleaseEnabled.get()) {

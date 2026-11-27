@@ -1,0 +1,24 @@
+{
+  "originHash" : "bc7ab2a1dc79b085155efe82a652c0b815aaf31dad62078a537b36c418a467ab",
+  "pins" : [
+    {
+      "identity" : "spm-nmapsgeometry",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/navermaps/SPM-NMapsGeometry.git",
+      "state" : {
+        "revision" : "436d5e2e684f557faf5ef5862fd6633a42d7af11",
+        "version" : "1.0.2"
+      }
+    },
+    {
+      "identity" : "spm-nmapsmap",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/navermaps/SPM-NMapsMap.git",
+      "state" : {
+        "revision" : "f106f929ced301c915ba840f7f613003a3afdedc",
+        "version" : "3.24.1"
+      }
+    }
+  ],
+  "version" : 3
+}

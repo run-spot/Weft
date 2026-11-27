@@ -44,12 +44,16 @@ weft-map/                   # Gradle namespace only; no artifact of its own
     src/commonMain/         # Kakao configuration and common binding
     src/androidMain/        # Kakao Android SDK adapter
     src/iosMain/            # Kakao SwiftPM import and Kotlin/Native adapter
+  navermap/                 # :weft-map:navermap -> weft-navermap
+    src/commonMain/         # Naver configuration and common binding
+    src/androidMain/        # Naver Android SDK adapter
+    src/iosMain/            # Naver SwiftPM import and Kotlin/Native adapter
 weft-login/                 # separate capability leaf
 weft-push/                  # separate capability leaf
 weft-bom/                   # version constraints for published leaves
 ~~~
 
-The namespace parent keeps provider-specific dependencies and release boundaries in independent leaf modules. `:weft-core` owns shared map models and Compose content; native SDK types remain in their platform source sets. The Kakao leaf's Android consumer must configure Kakao's Maven repository, while its iOS build uses the locked SwiftPM dependency.
+The namespace parent keeps provider-specific dependencies and release boundaries in independent leaf modules. `:weft-core` owns shared map models and Compose content; native SDK types remain in their platform source sets. Kakao and Naver are independent provider leaves that both implement the same `MapPlugin` slot, so an application selects exactly one provider per `Weft` runtime. The Kakao leaf's Android consumer configures Kakao's Maven repository, while the Naver leaf uses `https://repository.map.naver.com/archive/maven`; their iOS builds use their locked SwiftPM dependencies. Naver's dynamic KMP framework and official dynamic XCFramework must be validated by a separate iOS consumer before release.
 
 ## Supabase backend boundary
 

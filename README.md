@@ -13,7 +13,7 @@ Weft combines architecture guidance, focused Codex skills, project profiles, and
 
 ## Current status
 
-Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The Kakao map provider is the first map implementation in `:weft-map:kakaomap`, configured with artifact ID `weft-kakaomap`; `:weft-map` itself is only a namespace project. The provider has Android and iOS adapters, with Kakao Maps SDK 2.15.2 for Android and SwiftPM KakaoMapsSDK-SPM 2.12.19 for iOS. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login now includes Supabase Auth PKCE and Android Restore Credentials; push includes Firebase registration and Android/iOS notification presentation. Separate consumer and device validation remain release gates for those modules. These libraries are not yet published.
+Weft is an early open-source project. Its CLI creates a decision-recorded app layout, while the repository also hosts a KMP bridge-library workspace. `:weft-core` provides the plugin installation contract, health-check contract, provider-neutral map models, and Compose APIs (`LocalWeft`, `WeftApp`, and `WeftMap`). The `:weft-map` namespace contains Kakao (`weft-kakaomap`) and Naver (`weft-navermap`) provider leaves. Kakao uses Android Maps SDK 2.15.2 and iOS SwiftPM package 2.12.19; Naver uses Android Maps SDK and iOS `SPM-NMapsMap` 3.24.1. Both provider leaves have Android and iOS adapters; the Naver iOS framework and Xcode simulator consumer link locally, while runtime iOS tests require Apple Silicon. `:weft-live` is the first implemented activity capability candidate: Android notifications and an iOS 16.1 ActivityKit/WidgetKit façade are verified locally, while its external SwiftPM consumer path remains a release gate. Login includes Supabase Auth PKCE and Android Restore Credentials; push includes Firebase registration and Android/iOS notification presentation. Separate consumer and device validation remain release gates for those modules. These libraries are not yet published.
 
 ## Start here
 
@@ -183,7 +183,22 @@ dependencies {
 }
 ~~~
 
-The Kakao Android SDK is resolved from Kakao's Maven repository. Add it to the consumer's dependency repositories alongside Google and Maven Central:
+Configure the repository for the selected provider alongside Google and Maven Central. Kakao uses its release repository (shown below); Naver uses the official Naver Maven repository and `weft-navermap` leaf:
+
+~~~kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://repository.map.naver.com/archive/maven")
+    }
+}
+
+dependencies {
+    implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
+    implementation("run.thespot.weft:weft-navermap")
+}
+~~~
 
 ~~~kotlin
 dependencyResolutionManagement {

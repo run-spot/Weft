@@ -1,15 +1,14 @@
 # Maven Central Publishing
 
-This repository prepares four default Kotlin Multiplatform Maven Central publications, one verified
-live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication,
-but no artifact has been published.
+This repository prepares five default Kotlin Multiplatform Maven Central publications, one verified live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
 
 ## Build configuration
 
 - `build-logic` applies one KMP convention to each library and shared Maven publication metadata to all artifacts.
 - `GROUP` is `run.thespot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
-- The default KMP leaves publish `weft-core`, `weft-kakaomap`, `weft-login`, and `weft-push`, with Android and iOS target publications. `:weft-map` is a namespace parent; `:weft-map:kakaomap` owns the `weft-kakaomap` artifact. `:weft-live` is always verified but remains a candidate.
-- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the default four KMP artifacts to the same release version. It includes `weft-live` only when `weftLiveReleaseEnabled=true` is explicitly enabled.
+- The default KMP leaves publish `weft-core`, `weft-kakaomap`, `weft-navermap`, `weft-login`, and `weft-push`, with Android and iOS target publications. `:weft-map` is a namespace parent; `:weft-map:kakaomap` and `:weft-map:navermap` own the two map provider artifacts. `:weft-live` is always verified but remains a candidate.
+- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the default five KMP artifacts to the same release version. It includes `weft-live` only when `weftLiveReleaseEnabled=true` is explicitly enabled.
+- The Naver leaf resolves `com.naver.maps:map-sdk:3.24.1` from `https://repository.map.naver.com/archive/maven`; its iOS SwiftPM dependency is `NMapsMap` 3.24.1 and its KMP framework is dynamic.
 - POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
 - `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
 
@@ -26,7 +25,13 @@ The checked-in developer email is a reserved `.invalid` address for local POM va
 ./gradlew :weft-core:checkPomFileForKotlinMultiplatformPublication
 ./gradlew :weft-map:kakaomap:checkPomFileForKotlinMultiplatformPublication
 ./gradlew :weft-map:kakaomap:checkPomFileForAndroidPublication
+./gradlew :weft-map:navermap:check
+./gradlew :weft-map:navermap:checkPomFileForKotlinMultiplatformPublication
+./gradlew :weft-map:navermap:checkPomFileForAndroidPublication
+./gradlew verifyKakaoMapPublication
+./gradlew verifyNaverMapPublication
 ./gradlew :weft-map:kakaomap:publishToMavenLocal
+./gradlew :weft-map:navermap:publishToMavenLocal
 ./gradlew :weft-bom:generatePomFileForMavenPublication
 ./gradlew :weft-bom:publishToMavenLocal
 ~~~
@@ -39,7 +44,7 @@ Repeat the module-specific KMP POM and Maven Local checks for `:weft-login` and 
 ./gradlew -p harness/fixtures/weft-kakaomap-consumer -PVERSION_NAME=0.1.0-SNAPSHOT dependencies --configuration debugRuntimeClasspath
 ~~~
 
-The fixture's `settings.gradle.kts` configures `mavenLocal()`, Google's Maven repository, Maven Central, and Kakao's Maven repository (`https://devrepo.kakao.com/nexus/repository/kakaomap-releases/`). That vendor repository is required to resolve the Kakao Android SDK dependency from the `weft-kakaomap` publication. `publishToMavenLocal` is local-only and does not upload anything to Maven Central.
+The fixture's `settings.gradle.kts` configures `mavenLocal()`, Google's Maven repository, Maven Central, and Kakao's Maven repository (`https://devrepo.kakao.com/nexus/repository/kakaomap-releases/`). That vendor repository is required to resolve the Kakao Android SDK dependency from the `weft-kakaomap` publication. A separate Naver Android consumer must likewise configure `https://repository.map.naver.com/archive/maven`, resolve `weft-navermap` through the BOM, and prove that `com.naver.maps:map-sdk:3.24.1` is present. The Naver iOS consumer gate must link the generated dynamic `WeftNaverMap` framework together with the official dynamic `NMapsMap` XCFramework. `publishToMavenLocal` is local-only and does not upload anything to Maven Central.
 
 Gradle consumers import the BOM and omit the versions on selected artifacts:
 
@@ -52,9 +57,26 @@ dependencies {
 }
 ~~~
 
+Applications choose one map provider per runtime. A Naver Android consumer selects the Naver leaf explicitly:
+
+~~~kotlin
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://repository.map.naver.com/archive/maven")
+    }
+}
+
+dependencies {
+    implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
+    implementation("run.thespot.weft:weft-navermap")
+}
+~~~
+
 ## Release workflow
 
-The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map:kakaomap`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
+The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
 
 The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
 

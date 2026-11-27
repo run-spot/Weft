@@ -3,7 +3,7 @@ allprojects {
     version = providers.gradleProperty("VERSION_NAME").get()
 }
 
-val weftLibraryProjects = listOf(":weft-core", ":weft-map:kakaomap", ":weft-login", ":weft-push")
+val weftLibraryProjects = listOf(":weft-core", ":weft-map:kakaomap", ":weft-map:navermap", ":weft-login", ":weft-push")
 val weftLiveReleaseEnabled = providers.gradleProperty("weftLiveReleaseEnabled")
     .map(String::toBoolean)
     .orElse(false)
@@ -13,6 +13,7 @@ val weftReleasePublishTasks = buildList {
         listOf(
             ":weft-core:publishToMavenCentral",
             ":weft-map:kakaomap:publishToMavenCentral",
+            ":weft-map:navermap:publishToMavenCentral",
             ":weft-login:publishToMavenCentral",
             ":weft-push:publishToMavenCentral",
             ":weft-bom:publishToMavenCentral",
@@ -41,7 +42,7 @@ tasks.register("verify") {
         dependsOn(project(libraryPath).tasks.matching { it.name in kmpPublicationChecks })
     }
     dependsOn("verifyWeftBomPublication")
-    dependsOn("verifyWeftMapLayout", "verifyKakaoMapPublication")
+    dependsOn("verifyWeftMapLayout", "verifyKakaoMapPublication", "verifyNaverMapPublication")
 }
 
 tasks.register("verifyWeftMapLayout") {
@@ -49,8 +50,8 @@ tasks.register("verifyWeftMapLayout") {
     description = "Checks that the map namespace contains only published provider leaves."
     doLast {
         val mapNamespace = project(":weft-map")
-        check(mapNamespace.childProjects.keys == setOf("kakaomap")) {
-            "Expected :weft-map:kakaomap as the only map leaf, found ${mapNamespace.childProjects.keys}"
+        check(mapNamespace.childProjects.keys == setOf("kakaomap", "navermap")) {
+            "Expected :weft-map:kakaomap and :weft-map:navermap as map leaves, found ${mapNamespace.childProjects.keys}"
         }
         check(mapNamespace.tasks.findByName("check") == null) {
             "The :weft-map namespace project must not own a check task."
@@ -83,6 +84,32 @@ tasks.register("verifyKakaoMapPublication") {
         }
         check(hasKakaoAndroidSdk) {
             "Kakao map Android POM must declare com.kakao.maps.open:android."
+        }
+    }
+}
+
+tasks.register("verifyNaverMapPublication") {
+    group = "verification"
+    description = "Checks the Android publication POM includes the Naver Maps SDK dependency."
+    dependsOn(":weft-map:navermap:generatePomFileForAndroidPublication")
+
+    doLast {
+        val pomFile = file("weft-map/navermap/build/publications/android/pom-default.xml")
+        check(pomFile.isFile) { "Naver map Android POM was not generated: $pomFile" }
+
+        val document = javax.xml.parsers.DocumentBuilderFactory.newInstance()
+            .apply { isNamespaceAware = true }
+            .newDocumentBuilder()
+            .parse(pomFile)
+        val dependencies = document.getElementsByTagNameNS("*", "dependency")
+        val hasNaverAndroidSdk = (0 until dependencies.length).any { index ->
+            val dependency = dependencies.item(index) as org.w3c.dom.Element
+            val group = dependency.getElementsByTagNameNS("*", "groupId").item(0)?.textContent
+            val artifact = dependency.getElementsByTagNameNS("*", "artifactId").item(0)?.textContent
+            group == "com.naver.maps" && artifact == "map-sdk"
+        }
+        check(hasNaverAndroidSdk) {
+            "Naver map Android POM must declare com.naver.maps:map-sdk."
         }
     }
 }
@@ -127,7 +154,7 @@ tasks.register("verifyWeftBomPublication") {
             ).joinToString(":")
         }
         val expectedArtifacts = buildList {
-            addAll(listOf("weft-core", "weft-kakaomap", "weft-login", "weft-push"))
+            addAll(listOf("weft-core", "weft-kakaomap", "weft-navermap", "weft-login", "weft-push"))
             if (weftLiveReleaseEnabled.get()) add("weft-live")
         }
         val expected = expectedArtifacts
@@ -151,6 +178,9 @@ gradle.taskGraph.whenReady {
         check(":weft-map:kakaomap:check" in taskPaths) {
             "Root verification must check the :weft-map:kakaomap leaf."
         }
+        check(":weft-map:navermap:check" in taskPaths) {
+            "Root verification must check the :weft-map:navermap leaf."
+        }
     }
     if (":publishWeftReleaseToMavenCentral" in taskPaths) {
         check(":weft-map:publishToMavenCentral" !in taskPaths) {
@@ -158,6 +188,9 @@ gradle.taskGraph.whenReady {
         }
         check(":weft-map:kakaomap:publishToMavenCentral" in taskPaths) {
             "Release staging must publish the :weft-map:kakaomap leaf."
+        }
+        check(":weft-map:navermap:publishToMavenCentral" in taskPaths) {
+            "Release staging must publish the :weft-map:navermap leaf."
         }
         check((":weft-live:publishToMavenCentral" in taskPaths) == weftLiveReleaseEnabled.get()) {
             "Coordinated live publication must match weftLiveReleaseEnabled."

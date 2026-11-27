@@ -41,7 +41,7 @@ GROOVY_DEPENDENCY_RE = re.compile(
 ADD_DEPENDENCY_RE = re.compile(r"\b(dependencies\s*\.\s*)?add(?:Provider|AllLater|All)?\s*\(")
 COORDINATE_RE = re.compile(r"(?P<group>[A-Za-z0-9_.-]+):(?P<artifact>[A-Za-z0-9_.-]+)")
 REPOSITORY_TEXT_SUFFIXES = {".md", ".json", ".yml", ".yaml", ".py", ".sh"}
-GENERATED_PATH_PARTS = {".git", ".gradle", "build", "checkouts"}
+GENERATED_PATH_PARTS = {".git", ".gradle", "build", "checkouts", "swiftPMCheckout"}
 REQUIRED_SKILL_RULES = {
     "weft-architect": (
         "dependency-policy.md",
