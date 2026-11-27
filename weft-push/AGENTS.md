@@ -16,6 +16,7 @@
 - Keep `Context`, APNs types, notification framework objects, and provider SDK types out of `commonMain`.
 - Model permission and delivery differences explicitly; do not imply equivalent platform behavior without evidence.
 - Add dependencies only to the source set that needs them.
+- Expose `FirebasePush` through a Koin `WeftContribution`; accept an optional app-provided `PushMessageProcessor` and retain the library default when no definition is present.
 - Do not release the empty M0 scaffold.
 - Use Firebase Installation IDs for registration; do not introduce deprecated FCM token APIs.
 - Do not own or replace the app's `UNUserNotificationCenterDelegate`. iOS apps forward callbacks into the shared stream and decide foreground presentation.

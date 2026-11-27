@@ -16,6 +16,7 @@
 - Keep `Context`, `Activity`, `UIViewController`, provider SDK types, and platform URLs out of `commonMain`.
 - Keep app integrations on the approved Ktor/Ktorfit allowlist. Do not require a Supabase SDK in consumer apps.
 - Never require a confidential OAuth client secret in the mobile API. Supabase publishable keys are allowed; secret and `service_role` keys are not.
+- Expose a Koin `WeftContribution` for `WeftLogin`; read only the Supabase URL, publishable key, and callback URI from named Koin properties.
 - Keep PKCE verifiers and session tokens in platform-protected storage; Supabase Auth owns OAuth state, which the client must not override. Never log auth material or commit credentials.
 - Android Restore Credentials require API 28 or newer and a compatible credential provider. Standard OAuth must remain available as the fallback.
 - Create the Android restore credential after sign-in, attempt restore on first launch when no local session exists, and clear the OS credential on sign-out.

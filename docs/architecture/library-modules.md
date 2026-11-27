@@ -24,26 +24,99 @@ The first `:weft-login` implementation targets Supabase Auth: OAuth 2.0 Authoriz
 
 ## Plugin installation model
 
-`:weft-core` lets an app assemble its capabilities in one Ktor-style block instead of wiring each library separately:
+`:weft-core` owns the plugin registry and a container-neutral `WeftContribution` contract. Each
+capability module can expose one contribution, while a multi-module app collects contributions and
+builds one runtime. The app's Koin module is the single aggregation point:
 
 ~~~kotlin
-val weft = Weft {
-    install(KakaoMap) {
-        nativeAppKey = "kakao-native-app-key"
-    }
-    install(WeftLogin) {
-        redirectUri = "app://callback"
+@Module
+@Configuration
+class AppWeftModule {
+    @Single
+    fun weft(contributions: List<WeftContribution>): Weft = Weft(contributions)
+}
+
+@KoinApplication
+class AppKoinApplication
+
+startKoin<AppKoinApplication> {
+    properties(
+        mapOf(
+            "weft.kakaoMap.nativeAppKey" to kakaoNativeAppKey,
+            "weft.login.supabaseUrl" to supabaseUrl,
+            "weft.login.publishableKey" to supabasePublishableKey,
+            "weft.login.redirectUri" to loginRedirectUri,
+        ),
+    )
+}
+val weft = KoinPlatform.getKoin().get<Weft>()
+~~~
+
+Each implemented capability leaf publishes a Koin `@Configuration` module and a `@Single`
+contribution. Koin's Compiler Plugin discovers configured modules from the app classpath, and the
+app injects every `WeftContribution` into one factory. Kakao Maps reads its native app key from
+`weft.kakaoMap.nativeAppKey`; Supabase login reads `weft.login.supabaseUrl`,
+`weft.login.publishableKey`, and `weft.login.redirectUri`. These are public client settings; never
+put a Supabase secret or service-role key in Koin properties. Firebase push uses
+`DefaultPushMessageProcessor`, or receives an app-provided `PushMessageProcessor` definition.
+`weft-live` contributes when the optional artifact is present, but the app must provide a
+platform-specific `LiveActivityPlatform` definition. Each contribution performs the same
+`WeftConfig.install` call that a direct consumer would write. A consumer that does not start Koin
+can continue to build a runtime with `Weft { install(...) }`.
+
+The provider-side contribution stays with its implementation:
+
+~~~kotlin
+@Single
+class KakaoMapWeftContribution(
+    @Property("weft.kakaoMap.nativeAppKey") private val nativeAppKey: String,
+) : WeftContribution {
+    override fun install(config: WeftConfig) {
+        config.install(KakaoMap) {
+            this.nativeAppKey = this@KakaoMapWeftContribution.nativeAppKey
+        }
     }
 }
 
-val map = weft.get<MapPlugin>()
+@Module
+@ComponentScan
+@Configuration
+class KakaoMapKoinModule
 ~~~
+
+The Koin Compiler Plugin generates module DSL code that uses `koin-core`. Each capability leaf
+with annotated modules declares `koin-core` as an implementation dependency and exposes
+`koin-annotations` to consumers; the Kakao leaf follows that contract. An app module that declares
+`AppWeftModule` and `AppKoinApplication` applies the compiler plugin and declares `koin-core` plus
+`koin-annotations` in `commonMain`:
+
+~~~kotlin
+plugins {
+    id("io.insert-koin.compiler.plugin") version "1.2.1"
+}
+
+kotlin {
+    sourceSets.commonMain.dependencies {
+        implementation("io.insert-koin:koin-core:4.2.2")
+        implementation("io.insert-koin:koin-annotations:4.2.2")
+    }
+}
+~~~
+
+As reviewed on 2026-11-26, Koin's official setup lists Koin 4.2.2 and Compiler Plugin 1.2.1; the
+older KSP processor is deprecated. The plugin supports K2 starting at Kotlin 2.3.20, but its
+documented verification matrix currently stops at Kotlin 2.4.20. Weft's Kotlin 2.4.21 compile
+succeeds with a warning that the plugin is using its 2.4.20 adapter; this tuple remains unverified
+by Koin. Automatic discovery from a separately published KMP artifact is also a consumer-validation
+gate. See [Koin Compiler Plugin setup](https://insert-koin.io/docs/setup/compiler-plugin/),
+[Koin multi-module apps](https://insert-koin.io/docs/reference/koin-android/multi-module/), and
+[Koin releases](https://insert-koin.io/docs/support/releases/).
 
 Each plugin declares the `KClass` it installs under, and a capability family publishes one interface that its implementations use. `KakaoMap` and `NaverMap` install as `MapPlugin`; an app chooses one provider per `Weft` runtime. `WeftMap` resolves that contract from `LocalWeft` and publishes immutable camera, marker, polyline, polygon, and circle snapshots to the platform adapter. A future provider can implement the same interface without changing map UI code.
 
 Because the plugin type identifies the slot, only one plugin per type may be installed; a second installation throws `DuplicateWeftPluginException` naming the type and both plugin names. Resolution through `get<T>()` (or `get(KClass)`) throws `MissingWeftPluginException` when no plugin is installed, while `getOrNull<T>()` returns `null` for optional capabilities. Plugin `install` hooks run once after every registration is prepared, so a plugin may resolve peer plugins from the completed `Weft` scope.
 
-`:weft-core` holds no vendor or platform types. Provider modules add their plugin types, configuration, and adapters on top of it and keep Android and Apple SDK types in their platform source sets.
+`:weft-core` holds no Koin, vendor, or platform types. Provider modules add their plugin types, configuration, Koin contribution, and adapters on top of it and keep Android and Apple SDK types in their platform source sets.
 
 ## Compose entry point
 
@@ -69,7 +142,7 @@ override fun healthCheck(plugin: SupabasePlugin): List<WeftHealthCheck> = listOf
 
 ## Dependency allowlist verification
 
-The direct-dependency policy in [Application dependency policy](dependency-policy.md) is enforced for Gradle builds by the same plugin. `verifyWeftDependencies` compares every external module a module declares against `allowedDependencyGroups` and `allowedDependencies`, with defaults for the Weft, Kotlin, Compose, Kotlinx, Ktor, AndroidX, and Google groups. A build that adopts the policy sets `weft { enforceDependencyWhitelist = true }`, which also runs the check with `check`; without that switch the task exists but is not part of the build. Project and file dependencies are skipped because they have no Maven coordinate, an approved library may bring any transitive dependency its API needs, and test source sets are outside the allowlist.
+The direct-dependency policy in [Application dependency policy](dependency-policy.md) is enforced for Gradle builds by the same plugin. `verifyWeftDependencies` compares every external module a module declares against `allowedDependencyGroups` and `allowedDependencies`, with defaults for the Weft, Kotlin, Compose, Kotlinx, Ktor, Koin, AndroidX, and Google groups. A build that adopts the policy sets `weft { enforceDependencyWhitelist = true }`, which also runs the check with `check`; without that switch the task exists but is not part of the build. Project and file dependencies are skipped because they have no Maven coordinate, an approved library may bring any transitive dependency its API needs, and test source sets are outside the allowlist.
 
 ## Source ownership
 

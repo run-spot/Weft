@@ -15,7 +15,7 @@ It registers three tasks and the `weft { }` extension:
 
 | Task | Network | Wired into `check` | Purpose |
 | --- | --- | --- | --- |
-| `verifyWeftPlugins` | no | yes | Every required `.get<T>()` has an installed plugin, every credential literal in an `install(...)` block is real, and no secret or privileged credential ships in client code |
+| `verifyWeftPlugins` | no | yes | Every required `.get<T>()` has an installed plugin or configured `installedTypes` entry, every credential literal in an `install(...)` block is real, and no secret or privileged credential ships in client code |
 | `verifyWeftDependencies` | no | only with `weft { enforceDependencyWhitelist = true }` | Every declared dependency is on the Weft allowlist |
 | `verifyWeftHealth` | yes | no | Every configured and module-declared health check answers correctly |
 
@@ -30,8 +30,10 @@ Scans Kotlin sources (default `src`, excluding build output, generated code, and
 and reports:
 
 - **Missing capability**: a `.get<T>()` call on a Weft receiver (`weft`, `LocalWeft.current`, and
-  anything ending in those) whose `T` is not provided by any `install(...)`. `getOrNull<T>()` is an
-  optional lookup and is ignored. The failure names the type and every `file:line` that resolves it.
+  anything ending in those) whose `T` is not provided by a scanned `install(...)` or the configured
+  `installedTypes` metadata. `getOrNull<T>()` is an optional lookup and is ignored. The failure names
+  the type and every `file:line` that resolves it. Contributions compiled into dependency artifacts
+  are not source-scanned, so Koin consumers list those capability types in `installedTypes`.
 - **Empty or placeholder credential**: an `install(...)` configuration block assigning a blank
   string, or an obvious placeholder such as `TODO`, `CHANGE_ME`, `YOUR_...`, `example`, to a
   credential-like property (`key`, `token`, `secret`, `clientId`, `url`, `uri`, `endpoint`, ...).
@@ -54,10 +56,11 @@ leaked key:
 - **Provider secret tokens**: `sk-...` (OpenAI/Stripe style, including `sk-proj-...`), `ghp_`,
   `gho_`, `github_pat_`, `AKIA` + 16 characters, `xox[baprs]-`, and
   `-----BEGIN ... PRIVATE KEY-----` blocks.
-- **Forbidden client properties** in an `install(...)` block: `serviceRole`, `serviceRoleKey`,
-  `adminKey`, `secretKey`, `privateKey`, `clientSecret`. A property is rejected whether its value is
-  a literal or read from the environment, because handing the app a privileged credential is the
-  design error, not the literal.
+- **Forbidden client properties** in an `install(...)` block, Koin `@Property` / `@PropertyValue`,
+  or Koin `properties(mapOf(...))`: `serviceRole`, `serviceRoleKey`, `adminKey`, `secretKey`,
+  `privateKey`, `clientSecret`. A property is rejected whether its value is a literal or read from
+  the environment, because handing the app a privileged credential is the design error, not the
+  literal.
 
 **Strict masking**: no message, log line, or exception may contain the value. A finding reports
 `file:line`, the category (for example `Supabase service_role JWT` or `Secret token prefix (sk-)`),
@@ -84,7 +87,7 @@ weft {
 - An `allowedDependencyGroups` entry approves its own group and any dotted child, so `io.ktor`
   covers `io.ktor.client.core`; an entry ending in `.*` approves the whole family, as `androidx.*`
   does. The default list is `run.thespot.weft`, `org.jetbrains.kotlin`, `org.jetbrains.compose`,
-  `org.jetbrains.kotlinx`, `io.ktor`, `androidx.*`, and `com.google.*`; `allowedDependencies` is
+  `org.jetbrains.kotlinx`, `io.ktor`, `io.insert-koin`, `androidx.*`, and `com.google.*`; `allowedDependencies` is
   empty by default.
 - Only declared external modules are inspected: project and file dependencies have no Maven
   coordinate, and an approved library may bring any transitive dependency its API needs. Test source

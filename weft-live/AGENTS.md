@@ -19,6 +19,8 @@ coordinated release.
 - `iosMain` imports the checked-in local `WeftLiveKit` SwiftPM façade. The consuming app owns
   `NSSupportsLiveActivities`, WidgetBundle registration, deep-link routing, and app/widget package
   linkage.
+- Expose `WeftLive` through a Koin `WeftContribution`, but require the consuming app to provide a
+  platform-specific `LiveActivityPlatform`; Android notification configuration is app-owned.
 - Remote APNs/FCM updates, persistence, actions, images, foreground services, and private Samsung
   APIs are outside this slice.
 

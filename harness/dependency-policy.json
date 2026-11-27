@@ -6,6 +6,7 @@
     { "group": "run.thespot.montage", "artifacts": ["montage-kmp"] },
     { "group": "io.ktor", "artifactPrefix": "ktor-client-" },
     { "group": "io.ktor", "artifacts": ["ktor-serialization-kotlinx-json"] },
+    { "group": "io.insert-koin", "artifactPrefix": "koin-" },
     { "group": "de.jensklingenberg.ktorfit", "artifactPrefix": "ktorfit-" },
     {
       "group": "org.jetbrains.kotlin",

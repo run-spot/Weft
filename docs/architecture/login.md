@@ -20,6 +20,12 @@ val weft = Weft {
 val login = weft.get<LoginPlugin>()
 ~~~
 
+For a multi-module app using Koin, `weft-login` publishes a discovered contribution so the app
+does not need to repeat `install(WeftLogin)`. Set the public values `weft.login.supabaseUrl`,
+`weft.login.publishableKey`, and `weft.login.redirectUri` in Koin properties. The publishable key
+is intended for client use; never put a Supabase secret or `service_role` key there. See the
+[shared contribution assembly](library-modules.md#plugin-installation-model).
+
 Register the exact app callback URL in Supabase Auth's URL configuration. Configure the identity provider in the Supabase Dashboard and use the Supabase project's provider callback URL at the identity provider. Keep provider client secrets in Supabase's trusted configuration; the app only needs its public Supabase key.
 
 ## OAuth with PKCE

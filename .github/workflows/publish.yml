@@ -14,7 +14,7 @@ concurrency:
 jobs:
   publish:
     if: startsWith(github.ref, 'refs/tags/weft-v')
-    runs-on: ubuntu-latest
+    runs-on: macos-26
     env:
       ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
       ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
@@ -23,6 +23,8 @@ jobs:
       WEFT_DEVELOPER_EMAIL: ${{ vars.WEFT_DEVELOPER_EMAIL }}
     steps:
       - uses: actions/checkout@v4
+      - name: Select Xcode 26.2 for Firebase SwiftPM
+        run: sudo xcode-select --switch /Applications/Xcode_26.2.app
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

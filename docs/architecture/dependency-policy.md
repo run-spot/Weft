@@ -10,10 +10,11 @@ Application modules may directly depend on:
 - `run.thespot.montage:montage-kmp` for shared UI components and design-system behavior.
 - Ktor client artifacts (`io.ktor:ktor-client-*`) and the Kotlin serialization JSON adapter (`io.ktor:ktor-serialization-kotlinx-json`) for HTTP.
 - Ktorfit artifacts (`de.jensklingenberg.ktorfit:ktorfit-*`) for declarative HTTP APIs.
+- Koin artifacts (`io.insert-koin:koin-*`) when an app uses annotated module contributions to assemble its Weft runtime.
 
 Kotlin, coroutines, serialization runtime, Compose Multiplatform, and the AndroidX Compose, Activity, Credentials, Lifecycle, SavedState, and Core foundation artifacts required by the selected profile are platform foundations. They are listed in [the machine-readable allowlist](../../harness/dependency-policy.json). Kotlin/Gradle plugins, Android SDKs, and Apple SDKs are toolchain or platform APIs, not application libraries.
 
-Do not add another direct library for dependency injection, navigation, storage, image loading, analytics, logging, date/time, or UI components. Use the approved libraries and platform APIs. If a capability is missing, record the gap and add it to Weft or Montage through an explicit policy change. Do not install a one-off dependency in an app to bypass the allowlist.
+Do not add another direct library for dependency injection, navigation, storage, image loading, analytics, logging, date/time, or UI components. Koin is the approved dependency-injection option when using `WeftContribution`; apps that use the direct `Weft { install(...) }` API do not need to start Koin or apply its compiler plugin. Use the approved libraries and platform APIs. If a capability is missing, record the gap and add it to Weft or Montage through an explicit policy change. Do not install a one-off dependency in an app to bypass the allowlist.
 
 The allowlist applies to direct dependencies. Approved libraries may have transitive dependencies required to implement their APIs; do not redeclare those transitive components directly unless they are also allowlisted.
 
