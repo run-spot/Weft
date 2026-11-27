@@ -18,7 +18,7 @@
 - A KMP module that declares Koin definitions applies `weft.koin`. Keep the compiler plugin routed through this included build so the Kotlin Gradle Plugin and Koin plugin share their build classloader.
 - Koin Compiler Plugin 1.2.1 warns on Kotlin 2.4.21 because its published verification matrix ends at 2.4.20; keep the compile result and the warning recorded until Koin updates that matrix.
 - Never put publishing credentials or signing keys in the repository.
-- Keep Maven Central uploads staged for review; do not enable automatic release without an explicit maintainer decision.
+- Maven Central uploads are released automatically from a version tag by `.github/workflows/publish.yml`; keep credentials and signing keys out of tracked files, and never reuse a published version because Central coordinates are immutable.
 - Record official sources and a review date when changing toolchain versions.
 
 ## Verification
