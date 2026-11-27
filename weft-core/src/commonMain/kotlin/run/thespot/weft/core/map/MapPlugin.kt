@@ -3,6 +3,14 @@ package run.thespot.weft.core.map
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
+/** A provider's composable renderer for the shared map contract. */
+public typealias MapContentRenderer = @Composable (
+    state: WeftMapState,
+    modifier: Modifier,
+    content: @Composable MapScope.() -> Unit,
+    onError: ((Throwable) -> Unit)?,
+) -> Unit
+
 /**
  * Provider-neutral map capability exposed through the Weft plugin registry.
  *
@@ -10,14 +18,6 @@ import androidx.compose.ui.Modifier
  * [MapPlugin]::class so applications resolve the active provider by this shared contract.
  */
 public interface MapPlugin {
-    /**
-     * Renders a map state and its declarative children.
-     */
-    @Composable
-    public fun Content(
-        state: WeftMapState,
-        modifier: Modifier = Modifier,
-        content: @Composable MapScope.() -> Unit = {},
-        onError: ((Throwable) -> Unit)? = null,
-    ): Unit
+    /** Renderer supplied by the active provider. */
+    public val renderer: MapContentRenderer
 }

@@ -29,7 +29,7 @@
   - Test finite latitude/longitude and their `-90..90`/`-180..180` ranges.
   - Test non-negative finite zoom, finite bearing, and `0..90` tilt.
   - Test non-blank marker IDs and immutable `WeftMapState` construction.
-  - Test `MapPlugin.Content` can be implemented by a fake plugin with the exact public signature.
+  - Test `MapPlugin.renderer` accepts the provider-neutral composable renderer signature.
   - Test `MapContent` makes a defensive copy of the marker list.
 
 - [ ] **Step 2: Run the focused test and verify RED**

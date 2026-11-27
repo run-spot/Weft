@@ -52,14 +52,15 @@ The map contract lives under `run.thespot.weft.core.map` so that the core artifa
 dependency shared by every future provider artifact.
 
 ```kotlin
+public typealias MapContentRenderer = @Composable (
+    state: WeftMapState,
+    modifier: Modifier,
+    content: @Composable MapScope.() -> Unit,
+    onError: ((Throwable) -> Unit)?,
+) -> Unit
+
 public interface MapPlugin {
-    @Composable
-    public fun Content(
-        state: WeftMapState,
-        modifier: Modifier = Modifier,
-        content: @Composable MapScope.() -> Unit = {},
-        onError: ((Throwable) -> Unit)? = null,
-    )
+    public val renderer: MapContentRenderer
 }
 
 @DslMarker
@@ -125,7 +126,7 @@ public fun WeftMap(
     onError: ((Throwable) -> Unit)? = null,
 ) {
     Box(modifier) {
-        LocalWeft.current.get<MapPlugin>().Content(
+        LocalWeft.current.get<MapPlugin>().renderer(
             state = state,
             modifier = Modifier.fillMaxSize(),
             content = content,
@@ -277,13 +278,7 @@ The provider module has one common implementation and one expect/actual surface 
 private class KakaoMapPlugin(
     private val nativeAppKey: String,
 ) : MapPlugin {
-    @Composable
-    override fun Content(
-        state: WeftMapState,
-        modifier: Modifier,
-        content: @Composable MapScope.() -> Unit,
-        onError: ((Throwable) -> Unit)?,
-    ) {
+    override val renderer: MapContentRenderer = { state, modifier, content, onError ->
         KakaoMapPlatformSurface(
             nativeAppKey = nativeAppKey,
             state = state,

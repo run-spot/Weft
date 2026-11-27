@@ -139,8 +139,9 @@
 - [ ] **Step 3: Implement the minimal public provider entry point**
 
   In `NaverMap.kt`, add public `NaverMapConfig.ncpKeyId`, public `NaverMap`, and private
-  `NaverMapPlugin`. `NaverMapPlugin.Content` must call `rememberMapContent(content)` and
-  `NaverMapPlatformSurface(ncpKeyId, state, snapshot, modifier, onError)`. Add the `expect`
+  `NaverMapPlugin`. Its `MapContentRenderer` function value must call
+  `rememberMapContent(content)` and `NaverMapPlatformSurface(ncpKeyId, state, snapshot, modifier,
+  onError)`. Add the `expect`
   declaration in `NaverMapPlatform.kt`; it must accept only common types plus the NCP key string.
   Add `NaverMapException` as an `IllegalStateException` wrapper and keep SDK types out of
   common code.

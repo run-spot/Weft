@@ -62,8 +62,8 @@ private class KakaoMapIosSurface(
     override fun didMoveToWindow() {
         super.didMoveToWindow()
         if (window != null) {
-            val size = frame.useContents { size }
-            coordinator.onWindowAttached(width = size.width, height = size.height)
+            val (width, height) = bounds.useContents { size.width to size.height }
+            coordinator.onWindowAttached(width = width, height = height)
             host.onLayout()
         } else {
             coordinator.onWindowDetached()
@@ -72,8 +72,8 @@ private class KakaoMapIosSurface(
 
     override fun layoutSubviews() {
         super.layoutSubviews()
-        val size = frame.useContents { size }
-        coordinator.onLayout(width = size.width, height = size.height)
+        val (width, height) = bounds.useContents { size.width to size.height }
+        coordinator.onLayout(width = width, height = height)
         host.onLayout()
     }
 

@@ -1,10 +1,9 @@
 package run.thespot.weft.core.map
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 
 class MapModelsTest {
     @Test
@@ -145,20 +144,10 @@ class MapModelsTest {
     }
 
     @Test
-    fun mapPluginExposesTheProviderNeutralContentSignature() {
+    fun mapPluginExposesTheProviderNeutralRendererSignature() {
         val plugin: MapPlugin = object : MapPlugin {
-            @Composable
-            override fun Content(
-                state: WeftMapState,
-                modifier: Modifier,
-                content: @Composable MapScope.() -> Unit,
-                onError: ((Throwable) -> Unit)?,
-            ) = Unit
+            override val renderer: MapContentRenderer = { _, _, _, _ -> }
         }
+        assertNotNull(plugin.renderer)
     }
-}
-
-@Composable
-private fun renderMapPluginWithDefaults(plugin: MapPlugin) {
-    plugin.Content(WeftMapState(CameraPosition(LatLng(0.0, 0.0))))
 }

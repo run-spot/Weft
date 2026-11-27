@@ -99,9 +99,9 @@ public object NaverMap : WeftPlugin<NaverMapConfig, MapPlugin> {
 }
 ```
 
-`NaverMapPlugin.Content` calls the existing `rememberMapContent(content)` and forwards the
-immutable snapshot to an `expect/actual` platform surface. It does not add a second map DSL or
-provider-specific model.
+`NaverMapPlugin.renderer` uses the provider-neutral `MapContentRenderer` function value, calls the
+existing `rememberMapContent(content)`, and forwards the immutable snapshot to an `expect/actual`
+platform surface. It does not add a second map DSL or provider-specific model.
 
 ## Module and build layout
 

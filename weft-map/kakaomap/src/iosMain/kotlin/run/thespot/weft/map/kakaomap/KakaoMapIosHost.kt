@@ -4,6 +4,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.cValue
 import kotlinx.cinterop.useContents
+import platform.CoreGraphics.CGRectMake
 import platform.darwin.NSObject
 import platform.UIKit.UIColor
 import androidx.compose.ui.graphics.Color as ComposeColor
@@ -68,6 +69,9 @@ internal class KakaoMapIosMapViewHost(
     private var markerReconciler: KakaoMapIosMarkerReconciler? = null
     private var shapeLayer: ShapeLayer? = null
     private var shapeReconciler: KakaoMapIosShapeReconciler? = null
+    private var authenticated = false
+    private var activationRequested = false
+    private var engineActive = false
 
     override fun prepare(
         appKey: String,
@@ -76,6 +80,9 @@ internal class KakaoMapIosMapViewHost(
         onError: (Throwable) -> Unit,
     ) {
         check(controller == null) { "Kakao Maps iOS engine was prepared more than once." }
+        authenticated = false
+        activationRequested = false
+        engineActive = false
         readyCallback = onReady
         errorCallback = onError
         this.initialCamera = initialCamera
@@ -84,12 +91,16 @@ internal class KakaoMapIosMapViewHost(
                 SDKInitializer.InitSDKWithAppKey(key, KAPhaseReal)
             }
             val newController = KMController(viewContainer = container)
-            val newDelegate = ControllerDelegate()
+            val newDelegate = ControllerDelegate(appKey)
             controller = newController
             delegate = newDelegate
             newController.delegate = newDelegate
-            if (!newController.prepareEngine()) {
-                throw KakaoMapException("Kakao Maps iOS engine rejected prepareEngine().")
+            val prepared = newController.prepareEngine()
+            if (!prepared) {
+                val state = safeEngineStateDescription(newController, appKey)
+                throw KakaoMapException(
+                    "Kakao Maps iOS engine rejected prepareEngine(). SDK state: $state",
+                )
             }
         } catch (throwable: Throwable) {
             onError(throwable)
@@ -98,7 +109,15 @@ internal class KakaoMapIosMapViewHost(
     }
 
     override fun activate() {
+        checkNotNull(controller) { "Kakao Maps iOS engine is not prepared." }
+        activationRequested = true
+        activateEngineIfAuthenticated()
+    }
+
+    private fun activateEngineIfAuthenticated() {
+        if (!authenticated || !activationRequested || engineActive) return
         checkNotNull(controller) { "Kakao Maps iOS engine is not prepared." }.activateEngine()
+        engineActive = true
     }
 
     override fun render(camera: CameraPosition?, content: MapContent) {
@@ -134,7 +153,11 @@ internal class KakaoMapIosMapViewHost(
     }
 
     override fun pause() {
-        controller?.pauseEngine()
+        activationRequested = false
+        if (engineActive) {
+            controller?.pauseEngine()
+            engineActive = false
+        }
     }
 
     override fun reset() {
@@ -149,6 +172,9 @@ internal class KakaoMapIosMapViewHost(
                 controller = null
                 delegate = null
                 kakaoMap = null
+                authenticated = false
+                activationRequested = false
+                engineActive = false
                 pendingMapInfo = null
                 readyCallback = null
                 errorCallback = null
@@ -161,7 +187,14 @@ internal class KakaoMapIosMapViewHost(
     }
 
     fun onLayout() {
+        updateMapViewRect()
         addPendingViewIfReady()
+    }
+
+    private fun updateMapViewRect() {
+        val (width, height) = container.bounds.useContents { size.width to size.height }
+        if (width <= 0.0 || height <= 0.0) return
+        kakaoMap?.viewRect = CGRectMake(0.0, 0.0, width, height)
     }
 
     private fun createMapInfo(): MapviewInfo {
@@ -180,7 +213,9 @@ internal class KakaoMapIosMapViewHost(
     }
 
     private fun addPendingViewIfReady() {
-        if (didRequestMapView || container.frame.useContents { size.width <= 0.0 || size.height <= 0.0 }) return
+        if (didRequestMapView) return
+        val (width, height) = container.bounds.useContents { size.width to size.height }
+        if (width <= 0.0 || height <= 0.0) return
         val mapInfo = pendingMapInfo ?: return
         val activeController = controller ?: return
         didRequestMapView = true
@@ -432,7 +467,14 @@ internal class KakaoMapIosMapViewHost(
         )
     }
 
-    private inner class ControllerDelegate : NSObject(), MapControllerDelegateProtocol {
+    private inner class ControllerDelegate(
+        private val appKey: String,
+    ) : NSObject(), MapControllerDelegateProtocol {
+        override fun authenticationSucceeded() {
+            authenticated = true
+            activateEngineIfAuthenticated()
+        }
+
         override fun addViews() {
             pendingMapInfo = createMapInfo()
             addPendingViewIfReady()
@@ -445,6 +487,7 @@ internal class KakaoMapIosMapViewHost(
                 return
             }
             kakaoMap = map
+            updateMapViewRect()
             pendingMapInfo = null
             dispatchToMainThread {
                 readyCallback?.invoke(
@@ -459,7 +502,12 @@ internal class KakaoMapIosMapViewHost(
         }
 
         override fun authenticationFailed(errorCode: Long, desc: String) {
-            errorCallback?.invoke(KakaoMapException("Kakao Maps iOS authenticationFailed ($errorCode): $desc"))
+            authenticated = false
+            engineActive = false
+            val safeDescription = redactKakaoMapSdkText(desc, appKey).take(500)
+            errorCallback?.invoke(
+                KakaoMapException("Kakao Maps iOS authenticationFailed ($errorCode): $safeDescription"),
+            )
         }
     }
 
@@ -468,6 +516,24 @@ internal class KakaoMapIosMapViewHost(
         const val KAKAO_MAP_IOS_SHAPE_LAYER_ID = "weft_overlays"
         const val KAKAO_MAP_IOS_SHAPE_LAYER_Z_ORDER = 1L
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun safeEngineStateDescription(controller: KMController, appKey: String): String =
+    runCatching {
+        redactKakaoMapSdkText(controller.getStateDescMessage(), appKey)
+            .take(1_000)
+            .ifBlank { "unavailable" }
+    }.getOrElse { "unavailable" }
+
+private fun redactKakaoMapSdkText(message: String, appKey: String): String {
+    var safeMessage = message
+    if (appKey.isNotEmpty()) safeMessage = safeMessage.replace(appKey, "[redacted]")
+    val trimmedAppKey = appKey.trim()
+    if (trimmedAppKey.isNotEmpty()) safeMessage = safeMessage.replace(trimmedAppKey, "[redacted]")
+    return Regex(
+        "(?i)((?:native\\s+app\\s+key|app[-_ ]?key|api[-_ ]?key)\\s*[:=]\\s*)[^,\\s;]+",
+    ).replace(safeMessage) { match -> "${match.groupValues[1]}[redacted]" }
 }
 
 @OptIn(ExperimentalForeignApi::class)
