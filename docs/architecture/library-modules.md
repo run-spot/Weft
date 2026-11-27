@@ -1,6 +1,6 @@
 # Weft Bridge Library Modules
 
-The bridge-library workspace is a multi-project Gradle build inside the Weft repository. Each published capability is a separate Kotlin Multiplatform leaf with its own API and dependencies. `:weft-core` owns the plugin installation and provider-neutral map contracts. The BOM aligns versions, and the default release set is coordinated; candidates are verified before they are admitted to that set.
+The bridge-library workspace is a multi-project Gradle build inside the Weft repository. Each published capability is a separate Kotlin Multiplatform leaf with its own API and dependencies. `:weft-core` owns the plugin installation contract and provider-neutral map contracts. The BOM aligns versions, and the default release set is coordinated; candidates are verified before they are admitted to that set.
 
 ## Initial modules
 
@@ -10,13 +10,15 @@ The bridge-library workspace is a multi-project Gradle build inside the Weft rep
 | `:weft-map` | none | Namespace parent for provider leaves | No tasks or publication |
 | `:weft-map:kakaomap` | `weft-kakaomap` | Kakao Maps provider binding and Android/iOS adapters | M1: implemented; local fixture passes, CI/remote consumer pending |
 | `:weft-map:navermap` | `weft-navermap` | Naver Maps provider binding and Android/iOS adapters (SDK 3.24.1) | M1: implementation and local Android/iOS consumer gates pass; remote Maven consumer pending |
+| `:weft-sensor` | none | Namespace parent for sensor leaves | No tasks or publication |
+| `:weft-sensor:gps` | `weft-gps` | Provider-neutral GPS stream and native Android/iOS location adapters | M1/M2: implementation added; compile, permissions, and device validation pending |
 | `:weft-login` | `weft-login` | Supabase OAuth PKCE, Android/iOS session storage, and Android Restore Credentials | M1/M2: implementation compiled; provider and device validation pending |
 | `:weft-push` | `weft-push` | FID-based registration, common message processing, and OS notification presentation backed by Firebase Cloud Messaging | M2: Android presenter and iOS app/extension processor bridge |
 | `:weft-live` | `weft-live` | Finite live-activity lifecycle with Android notifications and an ActivityKit/WidgetKit façade | M1: candidate implemented; external Apple consumer and remote SwiftPM source pending |
-| `:weft-bom` | `weft-bom` | Maven BOM aligning the default five KMP artifacts; optionally includes `weft-live` | M0: build and publication skeleton |
+| `:weft-bom` | `weft-bom` | Maven BOM aligning the default six KMP artifacts; optionally includes `weft-live` | M0: build and publication skeleton |
 | `:weft-gradle-plugin` | not published | Gradle plugin with the offline wiring check and the aggregated health check | M1: plugin and health verification |
 
-Published artifacts use group `run.thespot.weft` and shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. Login implements the Supabase path; its project and device validation remain before release, and a generic OIDC adapter for Spring-backed profiles remains future work. Push has its public API and first Firebase adapters, but is not a release candidate until CI and a separate Android/iOS consumer validate both platform paths. The Kakao provider also remains short of release readiness until CI and a separately published consumer validate its Android/iOS path. The Naver provider's Android publication and iOS dynamic-framework consumer pass locally; runtime iOS tests require Apple Silicon, and CI plus a separately published Maven consumer remain release gates. `:weft-live` is always included in root verification, but its BOM constraint and coordinated publication remain behind `weftLiveReleaseEnabled=false` until the versioned remote SwiftPM and external consumer gates pass.
+Published artifacts use group `run.thespot.weft` and shared development version `0.1.0-SNAPSHOT`. The `run.thespot` namespace must be verified in Central Portal before the first release. The GPS stream's permission flow and Android/iOS device behavior need validation before release. Login implements the Supabase path; its project and device validation remain before release, and a generic OIDC adapter for Spring-backed profiles remains future work. Push has its public API and first Firebase adapters, but is not a release candidate until CI and a separate Android/iOS consumer validate both platform paths. The Kakao provider also remains short of release readiness until CI and a separately published consumer validate its Android/iOS path. The Naver provider's Android publication and iOS dynamic-framework consumer pass locally; runtime iOS tests require Apple Silicon, and CI plus a separately published Maven consumer remain release gates. `:weft-live` is always included in root verification, but its BOM constraint and coordinated publication remain behind `weftLiveReleaseEnabled=false` until the versioned remote SwiftPM and external consumer gates pass.
 
 ## Login capability roadmap
 
@@ -63,6 +65,10 @@ put a Supabase secret or service-role key in Koin properties. Firebase push uses
 platform-specific `LiveActivityPlatform` definition. Each contribution performs the same
 `WeftConfig.install` call that a direct consumer would write. A consumer that does not start Koin
 can continue to build a runtime with `Weft { install(...) }`.
+
+The `:weft-sensor:gps` contribution installs `Gps` under its own `GpsPlugin` type. GPS and maps can
+therefore be installed in the same runtime; adding another sensor leaf gives that sensor a separate
+plugin type and dependency.
 
 The provider-side contribution stays with its implementation:
 
@@ -112,7 +118,7 @@ gate. See [Koin Compiler Plugin setup](https://insert-koin.io/docs/setup/compile
 [Koin multi-module apps](https://insert-koin.io/docs/reference/koin-android/multi-module/), and
 [Koin releases](https://insert-koin.io/docs/support/releases/).
 
-Each plugin declares the `KClass` it installs under, and a capability family publishes one interface that its implementations use. `KakaoMap` and `NaverMap` install as `MapPlugin`; an app chooses one provider per `Weft` runtime. `WeftMap` resolves that contract from `LocalWeft` and publishes immutable camera, marker, polyline, polygon, and circle snapshots to the platform adapter. A future provider can implement the same interface without changing map UI code.
+Each plugin declares the `KClass` it installs under, and a capability family publishes one interface that its implementations use. `KakaoMap` and `NaverMap` install as `MapPlugin`; an app chooses one provider per `Weft` runtime. `WeftMap` resolves that contract from `LocalWeft` and publishes immutable camera, marker, polyline, polygon, and circle snapshots to the platform adapter. `Gps` installs as `GpsPlugin`, a distinct slot that can coexist with a map and other sensor capabilities. A future map provider can implement the same interface without changing map UI code.
 
 Because the plugin type identifies the slot, only one plugin per type may be installed; a second installation throws `DuplicateWeftPluginException` naming the type and both plugin names. Resolution through `get<T>()` (or `get(KClass)`) throws `MissingWeftPluginException` when no plugin is installed, while `getOrNull<T>()` returns `null` for optional capabilities. Plugin `install` hooks run once after every registration is prepared, so a plugin may resolve peer plugins from the completed `Weft` scope.
 
@@ -157,7 +163,7 @@ Each module uses the standard KMP source-set boundaries:
   src/iosMain/kotlin/         # Kotlin/Native adapter and Apple interop
 ~~~
 
-Only create a source-set implementation when a module milestone needs it. Keep Android and Apple SDK dependencies in their platform source sets. The `:weft-map` parent is only a namespace; `:weft-map:kakaomap` and `:weft-map:navermap` are the published leaves. The BOM is metadata-only and constrains `weft-core`, `weft-kakaomap`, `weft-navermap`, `weft-login`, and `weft-push` to the shared release version; it does not add runtime dependencies. When the explicit release gate is enabled, it also constrains `weft-live`. `:weft-core` owns the provider-neutral map contract.
+Only create a source-set implementation when a module milestone needs it. Keep Android and Apple SDK dependencies in their platform source sets. The `:weft-map` and `:weft-sensor` parents are namespaces; `:weft-map:kakaomap`, `:weft-map:navermap`, and `:weft-sensor:gps` are published leaves. The BOM is metadata-only and constrains `weft-core`, `weft-kakaomap`, `weft-navermap`, `weft-gps`, `weft-login`, and `weft-push` to the shared release version; it does not add runtime dependencies. When the explicit release gate is enabled, it also constrains `weft-live`. `:weft-core` owns the provider-neutral map contract; sensor leaf artifacts own their sensor contracts and native adapters.
 
 `:weft-push` owns the provider-neutral registration ID, message-processing contract, notification request, presenter API, and permission status. The sending backend constructs the FCM data payload; Android and iOS adapters present common processor results. Its FCM setup and OS lifecycle boundaries are described in [Push notifications](push-notifications.md).
 

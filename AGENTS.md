@@ -48,7 +48,7 @@ The script checks profile manifests, required docs, skill frontmatter, Markdown 
 ## Gradle libraries and release safety
 
 - `build-logic` owns shared KMP and Maven Central conventions; read its nearest `AGENTS.md` before changing conventions.
-- `weft-core`, `weft-map:kakaomap`, `weft-login`, and `weft-push` are KMP publication units with independent API milestones; `weft-map` itself is a namespace project, and `weft-bom` aligns the four published artifacts.
+- `weft-core`, `weft-map:kakaomap`, `weft-map:navermap`, `weft-sensor:gps`, `weft-login`, and `weft-push` are KMP publication units with independent API milestones; `weft-map` and `weft-sensor` are namespace projects, and `weft-bom` aligns the default published artifacts.
 - Keep credentials and signing keys out of tracked files. Configure them as Gradle properties or GitHub Actions secrets.
 - Do not run a Maven Central publication task unless the maintainer explicitly requests a release. Published Central coordinates are immutable.
 
@@ -56,8 +56,9 @@ The script checks profile manifests, required docs, skill frontmatter, Markdown 
 
 - `build-logic`: shared KMP target, toolchain, POM, signing, Compose compiler, and JVM plugin conventions.
 - `:weft-core`: plugin installation contract (`Weft`, `WeftConfig`, `WeftPlugin`, `WeftContribution`, `Weft.get`), the Compose entry point (`LocalWeft`, `WeftApp`), and the health-check contract (`WeftHealthCheck`, `Weft.healthChecks`); no Koin, vendor, or platform types.
-- `:weft-map`: namespace project only; `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-login`, and `:weft-push` are capability-library publication leaves with independent API milestone checklists. Each implemented leaf exposes a Koin-annotated `WeftContribution`; `:weft-live` follows the same pattern but remains a release-gated candidate outside the default BOM.
+- `:weft-map` and `:weft-sensor`: namespace projects only; their provider/capability leaves, `:weft-login`, and `:weft-push` are independent publication units. Each implemented leaf exposes a Koin-annotated `WeftContribution`; `:weft-live` follows the same pattern but remains a release-gated candidate outside the default BOM.
+- `:weft-sensor:gps`: native Android and Apple location streams behind the `GpsPlugin` contract. Keep platform permission prompts and app disclosure at the application boundary; Android consumers initialize the application context with `initializeWeftGps(context)` before collecting updates.
 - `:weft-push`: exposes FID-based Firebase registration, a common message processor, and platform notification presentation; see `docs/architecture/push-notifications.md` for Android and iOS lifecycle boundaries.
 - `:weft-gradle-plugin`: `verifyWeftPlugins` (offline plugin, credential literal, and client-secret check, part of `check`), `verifyWeftDependencies` (declared-dependency allowlist, opt-in for `check`), and `verifyWeftHealth` (aggregated credentialed probes, run on request).
-- `:weft-bom`: metadata-only Java Platform that publishes version constraints for `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-login`, and `:weft-push`.
+- `:weft-bom`: metadata-only Java Platform that publishes version constraints for `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-sensor:gps`, `:weft-login`, and `:weft-push`.
 - The KMP modules share build conventions. Keep the BOM as version metadata; do not add library-to-library dependencies without a real public API need.

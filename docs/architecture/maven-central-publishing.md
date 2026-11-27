@@ -1,13 +1,13 @@
 # Maven Central Publishing
 
-This repository prepares five default Kotlin Multiplatform Maven Central publications, one verified live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
+This repository prepares six default Kotlin Multiplatform Maven Central publications, one verified live-activity candidate, and one Java Platform BOM. The Gradle build is configured for publication, but no artifact has been published.
 
 ## Build configuration
 
 - `build-logic` applies one KMP convention to each library and shared Maven publication metadata to all artifacts.
 - `GROUP` is `run.thespot.weft`; `VERSION_NAME` defaults to `0.1.0-SNAPSHOT`.
-- The default KMP leaves publish `weft-core`, `weft-kakaomap`, `weft-navermap`, `weft-login`, and `weft-push`, with Android and iOS target publications. `:weft-map` is a namespace parent; `:weft-map:kakaomap` and `:weft-map:navermap` own the two map provider artifacts. `:weft-live` is always verified but remains a candidate.
-- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the default five KMP artifacts to the same release version. It includes `weft-live` only when `weftLiveReleaseEnabled=true` is explicitly enabled.
+- The default KMP leaves publish `weft-core`, `weft-kakaomap`, `weft-navermap`, `weft-gps`, `weft-login`, and `weft-push`, with Android and iOS target publications. `:weft-map` and `:weft-sensor` are namespace parents; `:weft-map:kakaomap`, `:weft-map:navermap`, and `:weft-sensor:gps` own their capability artifacts. `:weft-live` is always verified but remains a candidate.
+- `:weft-bom` publishes `weft-bom`, a Maven BOM that constrains the default six KMP artifacts to the same release version. It includes `weft-live` only when `weftLiveReleaseEnabled=true` is explicitly enabled.
 - The Naver leaf resolves `com.naver.maps:map-sdk:3.24.1` from `https://repository.map.naver.com/archive/maven`; its iOS SwiftPM dependency is `NMapsMap` 3.24.1 and its KMP framework is dynamic.
 - POM metadata includes the Apache-2.0 license, Weft maintainer identity, and GitHub SCM coordinates.
 - `publishToMavenCentral()` stages the deployment for validation. Automatic release is not enabled.
@@ -28,6 +28,8 @@ The checked-in developer email is a reserved `.invalid` address for local POM va
 ./gradlew :weft-map:navermap:check
 ./gradlew :weft-map:navermap:checkPomFileForKotlinMultiplatformPublication
 ./gradlew :weft-map:navermap:checkPomFileForAndroidPublication
+./gradlew :weft-sensor:gps:check
+./gradlew :weft-sensor:gps:checkPomFileForKotlinMultiplatformPublication
 ./gradlew verifyKakaoMapPublication
 ./gradlew verifyNaverMapPublication
 ./gradlew :weft-map:kakaomap:publishToMavenLocal
@@ -36,7 +38,7 @@ The checked-in developer email is a reserved `.invalid` address for local POM va
 ./gradlew :weft-bom:publishToMavenLocal
 ~~~
 
-Repeat the module-specific KMP POM and Maven Local checks for `:weft-login` and `:weft-push`. To run the separate Kakao consumer fixture, publish the required artifacts locally first:
+Repeat the module-specific KMP POM and Maven Local checks for `:weft-login` and `:weft-push`. The GPS API uses platform location frameworks and has no vendor repository requirement. To run the separate Kakao consumer fixture, publish the required artifacts locally first:
 
 ~~~bash
 ./gradlew :weft-core:publishToMavenLocal :weft-map:kakaomap:publishToMavenLocal :weft-bom:publishToMavenLocal
@@ -53,6 +55,7 @@ dependencies {
     implementation(platform("run.thespot.weft:weft-bom:1.0.0"))
     implementation("run.thespot.weft:weft-core")
     implementation("run.thespot.weft:weft-kakaomap")
+    implementation("run.thespot.weft:weft-gps")
     implementation("run.thespot.weft:weft-login")
 }
 ~~~
@@ -76,7 +79,7 @@ dependencies {
 
 ## Release workflow
 
-The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
+The libraries and BOM share a version and are staged together. Publish a GitHub release with a tag such as `weft-v1.0.0`. The workflow removes the `weft-v` prefix, overrides `VERSION_NAME`, and stages `:weft-core`, `:weft-map:kakaomap`, `:weft-map:navermap`, `:weft-sensor:gps`, `:weft-login`, `:weft-push`, and `:weft-bom` publications for Central Portal review. A maintainer reviews the validated deployments and publishes them from Central Portal. The workflow does not enable automatic publication.
 
 The release is blocked until all selected libraries have completed their module milestones, the namespace is verified, all coordinates and POMs are reviewed, and a consumer build passes. Maven Central components are immutable after publication.
 

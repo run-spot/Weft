@@ -48,6 +48,8 @@ jobs:
           :weft-map:kakaomap:linkDebugFrameworkIosSimulatorArm64
           :weft-login:compileKotlinIosArm64
           :weft-login:compileKotlinIosSimulatorArm64
+          :weft-sensor:gps:compileKotlinIosArm64
+          :weft-sensor:gps:compileKotlinIosSimulatorArm64
           :weft-push:linkDebugFrameworkIosArm64
           :weft-push:linkDebugFrameworkIosSimulatorArm64
           :weft-live:linkDebugFrameworkIosArm64
