@@ -62,13 +62,7 @@ private class RecordingMapPlugin : MapPlugin {
     var content: (@Composable MapScope.() -> Unit)? = null
     var onError: ((Throwable) -> Unit)? = null
 
-    @Composable
-    override fun Content(
-        state: WeftMapState,
-        modifier: Modifier,
-        content: @Composable MapScope.() -> Unit,
-        onError: ((Throwable) -> Unit)?,
-    ) {
+    override val renderer: MapContentRenderer = { state, modifier, content, onError ->
         this.state = state
         this.modifier = modifier
         this.content = content

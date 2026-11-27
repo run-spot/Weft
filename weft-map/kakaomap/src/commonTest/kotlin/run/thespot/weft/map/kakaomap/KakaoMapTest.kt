@@ -1,13 +1,10 @@
 package run.thespot.weft.map.kakaomap
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import run.thespot.weft.core.DuplicateWeftPluginException
 import run.thespot.weft.core.Weft
 import run.thespot.weft.core.WeftPlugin
+import run.thespot.weft.core.map.MapContentRenderer
 import run.thespot.weft.core.map.MapPlugin
-import run.thespot.weft.core.map.MapScope
-import run.thespot.weft.core.map.WeftMapState
 import kotlin.reflect.KClass
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -77,13 +74,7 @@ private object OtherMapProvider : WeftPlugin<OtherMapConfig, MapPlugin> {
     override val pluginName: String = "OtherMapProvider"
 
     override fun prepare(block: OtherMapConfig.() -> Unit): MapPlugin = object : MapPlugin {
-        @Composable
-        override fun Content(
-            state: WeftMapState,
-            modifier: Modifier,
-            content: @Composable MapScope.() -> Unit,
-            onError: ((Throwable) -> Unit)?,
-        ) = Unit
+        override val renderer: MapContentRenderer = { _, _, _, _ -> }
     }
 
     override fun install(plugin: MapPlugin, scope: Weft) = Unit

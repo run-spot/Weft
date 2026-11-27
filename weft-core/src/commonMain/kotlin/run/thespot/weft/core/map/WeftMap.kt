@@ -17,11 +17,11 @@ public fun WeftMap(
     onError: ((Throwable) -> Unit)? = null,
 ): Unit {
     Box(modifier) {
-        LocalWeft.current.get<MapPlugin>().Content(
-            state = state,
-            modifier = Modifier.fillMaxSize(),
-            content = content,
-            onError = onError,
+        LocalWeft.current.get<MapPlugin>().renderer(
+            state,
+            Modifier.fillMaxSize(),
+            content,
+            onError,
         )
     }
 }

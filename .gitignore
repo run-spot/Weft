@@ -1,6 +1,7 @@
 .DS_Store
 .gradle/
 .kotlin/
+.swiftpm-locks/
 build/
 .build/
 out/

@@ -113,7 +113,7 @@ setContent {
 
 Reading `LocalWeft` outside `WeftApp` fails during composition with a message that names the wrapper, and a preview or UI test provides a fake runtime the same way.
 
-`WeftMap` delegates to the installed provider. Its child content is provider-neutral and keyed by element ID; markers and the basic polyline, polygon, and circle overlays share the same Compose node tree. See the [provider-neutral overlay contract](docs/superpowers/specs/2026-11-26-weft-map-overlays-design.md).
+`WeftMap` delegates to the installed provider through `MapPlugin.renderer`, a composable function value. Its child content is provider-neutral and keyed by element ID; markers and the basic polyline, polygon, and circle overlays share the same Compose node tree. The function value keeps the provider dispatch compatible with Kotlin/Native. See the [provider-neutral overlay contract](docs/superpowers/specs/2026-11-26-weft-map-overlays-design.md).
 
 ~~~kotlin
 WeftApp(weft) {
@@ -216,6 +216,13 @@ The `run.thespot` Central namespace must be verified before the first release. T
 platform adapters are implemented, and the live-activity candidate is locally verified, but the
 bridge release baseline remains a candidate until CI and published consumers validate the full
 target set. See the module instructions and [toolchain policy](docs/architecture/toolchain-policy.md).
+
+## Run the local demo app
+
+[The demo](demo/README.md) is a local Gradle composite consumer for the Weft modules. It runs as an
+Android app and a project-free Kotlin/Native iOS simulator app, with no Swift app source. Both
+exercise the local Weft dependencies and Kakao SwiftPM import. The login and push pages report their
+current M0 status because those modules do not expose runtime APIs yet.
 
 ~~~bash
 ./gradlew projects
