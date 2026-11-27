@@ -1,13 +1,10 @@
 package run.thespot.weft.map.navermap
 
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import run.thespot.weft.core.Weft
 import run.thespot.weft.core.WeftHealthCheck
 import run.thespot.weft.core.WeftPlugin
+import run.thespot.weft.core.map.MapContentRenderer
 import run.thespot.weft.core.map.MapPlugin
-import run.thespot.weft.core.map.MapScope
-import run.thespot.weft.core.map.WeftMapState
 import run.thespot.weft.core.map.rememberMapContent
 import kotlin.reflect.KClass
 
@@ -39,13 +36,7 @@ public object NaverMap : WeftPlugin<NaverMapConfig, MapPlugin> {
 private class NaverMapPlugin(
     private val ncpKeyId: String,
 ) : MapPlugin {
-    @Composable
-    override fun Content(
-        state: WeftMapState,
-        modifier: Modifier,
-        content: @Composable MapScope.() -> Unit,
-        onError: ((Throwable) -> Unit)?,
-    ) {
+    override val renderer: MapContentRenderer = { state, modifier, content, onError ->
         NaverMapPlatformSurface(
             ncpKeyId = ncpKeyId,
             state = state,

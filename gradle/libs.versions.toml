@@ -35,11 +35,11 @@ firebase-messaging = { module = "com.google.firebase:firebase-messaging", versio
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
 androidx-credentials = { module = "androidx.credentials:credentials", version.ref = "androidx-credentials" }
 androidx-credentials-play-services-auth = { module = "androidx.credentials:credentials-play-services-auth", version.ref = "androidx-credentials" }
+androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 
 [plugins]
 koin-compiler = { id = "io.insert-koin.compiler.plugin", version.ref = "koin-compiler" }
-androidx-activity = { module = "androidx.activity:activity", version.ref = "activity" }
-androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
