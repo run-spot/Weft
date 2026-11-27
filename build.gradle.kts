@@ -3,7 +3,14 @@ allprojects {
     version = providers.gradleProperty("VERSION_NAME").get()
 }
 
-val weftLibraryProjects = listOf(":weft-core", ":weft-map:kakaomap", ":weft-map:navermap", ":weft-login", ":weft-push")
+val weftLibraryProjects = listOf(
+    ":weft-core",
+    ":weft-map:kakaomap",
+    ":weft-map:navermap",
+    ":weft-sensor:gps",
+    ":weft-login",
+    ":weft-push",
+)
 val weftLiveReleaseEnabled = providers.gradleProperty("weftLiveReleaseEnabled")
     .map(String::toBoolean)
     .orElse(false)
@@ -14,6 +21,7 @@ val weftReleasePublishTasks = buildList {
             ":weft-core:publishToMavenCentral",
             ":weft-map:kakaomap:publishToMavenCentral",
             ":weft-map:navermap:publishToMavenCentral",
+            ":weft-sensor:gps:publishToMavenCentral",
             ":weft-login:publishToMavenCentral",
             ":weft-push:publishToMavenCentral",
             ":weft-bom:publishToMavenCentral",
@@ -42,7 +50,12 @@ tasks.register("verify") {
         dependsOn(project(libraryPath).tasks.matching { it.name in kmpPublicationChecks })
     }
     dependsOn("verifyWeftBomPublication")
-    dependsOn("verifyWeftMapLayout", "verifyKakaoMapPublication", "verifyNaverMapPublication")
+    dependsOn(
+        "verifyWeftMapLayout",
+        "verifyWeftSensorLayout",
+        "verifyKakaoMapPublication",
+        "verifyNaverMapPublication",
+    )
 }
 
 tasks.register("verifyWeftMapLayout") {
@@ -58,6 +71,23 @@ tasks.register("verifyWeftMapLayout") {
         }
         check(mapNamespace.tasks.names.none { it.startsWith("publish") }) {
             "The :weft-map namespace project must not publish an artifact."
+        }
+    }
+}
+
+tasks.register("verifyWeftSensorLayout") {
+    group = "verification"
+    description = "Checks that the sensor namespace contains only published sensor leaves."
+    doLast {
+        val sensorNamespace = project(":weft-sensor")
+        check(sensorNamespace.childProjects.keys == setOf("gps")) {
+            "Expected :weft-sensor:gps as the first sensor leaf, found ${sensorNamespace.childProjects.keys}"
+        }
+        check(sensorNamespace.tasks.findByName("check") == null) {
+            "The :weft-sensor namespace project must not own a check task."
+        }
+        check(sensorNamespace.tasks.names.none { it.startsWith("publish") }) {
+            "The :weft-sensor namespace project must not publish an artifact."
         }
     }
 }
@@ -154,7 +184,7 @@ tasks.register("verifyWeftBomPublication") {
             ).joinToString(":")
         }
         val expectedArtifacts = buildList {
-            addAll(listOf("weft-core", "weft-kakaomap", "weft-navermap", "weft-login", "weft-push"))
+            addAll(listOf("weft-core", "weft-kakaomap", "weft-navermap", "weft-gps", "weft-login", "weft-push"))
             if (weftLiveReleaseEnabled.get()) add("weft-live")
         }
         val expected = expectedArtifacts
@@ -181,6 +211,9 @@ gradle.taskGraph.whenReady {
         check(":weft-map:navermap:check" in taskPaths) {
             "Root verification must check the :weft-map:navermap leaf."
         }
+        check(":weft-sensor:gps:check" in taskPaths) {
+            "Root verification must check the :weft-sensor:gps leaf."
+        }
     }
     if (":publishWeftReleaseToMavenCentral" in taskPaths) {
         check(":weft-map:publishToMavenCentral" !in taskPaths) {
@@ -191,6 +224,9 @@ gradle.taskGraph.whenReady {
         }
         check(":weft-map:navermap:publishToMavenCentral" in taskPaths) {
             "Release staging must publish the :weft-map:navermap leaf."
+        }
+        check(":weft-sensor:gps:publishToMavenCentral" in taskPaths) {
+            "Release staging must publish the :weft-sensor:gps leaf."
         }
         check((":weft-live:publishToMavenCentral" in taskPaths) == weftLiveReleaseEnabled.get()) {
             "Coordinated live publication must match weftLiveReleaseEnabled."

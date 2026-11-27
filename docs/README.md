@@ -13,6 +13,7 @@
 - [KMP bridge library contract](architecture/bridge-library.md)
 - [Bridge library modules](architecture/library-modules.md)
 - [Push notifications](architecture/push-notifications.md)
+- [Sensor capabilities](architecture/sensors.md)
 - [Maven Central publishing](architecture/maven-central-publishing.md)
 - [Backend choices and PKCE setup](architecture/backend.md)
 - [Supabase login with Weft](architecture/login.md)
