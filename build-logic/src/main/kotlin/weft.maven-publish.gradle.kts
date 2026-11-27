@@ -6,7 +6,9 @@ val capabilityName = project.name.removePrefix("weft-")
 val componentName = if (project.name == "weft-bom") "BOM" else capabilityName.replaceFirstChar { it.uppercase() }
 
 mavenPublishing {
-    publishToMavenCentral()
+    // The release workflow publishes from an immutable version tag, so Central Portal must
+    // release the validated deployment without a manual Publish step.
+    publishToMavenCentral(automaticRelease = true)
     signAllPublications()
     pom {
         name.set("Weft $componentName")
